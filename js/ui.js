@@ -165,12 +165,8 @@ function buildTable() {
                     clearSelection();
                     selectCell(cell);
                     setAnchor(cell);
-                    // Focus the input so user can type immediately
-                    var input = cell.querySelector('input');
-                    if (input) {
-                        input.focus();
-                        setTimeout(function () { input.select(); }, 0);
-                    }
+                    // Don't focus here - will focus on mouseup if not dragging
+                    // This prevents blur from copying values during drag selection
                 }
 
                 // Start dragging selection from this anchor (if not set already)

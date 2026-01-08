@@ -199,6 +199,20 @@ function setupEventListeners() {
         // Ensure we don't remain a "move candidate" after mouse is released
         movingCandidate = false;
         moveMouseStart = { x: 0, y: 0 };
+
+        // If single cell is selected, focus it so user can type
+        if (selectedCells.size === 1 && !isMoving) {
+            var key = Array.from(selectedCells)[0];
+            var parts = key.split('-');
+            var cell = document.querySelector('[data-row="' + parts[0] + '"][data-col="' + parts[1] + '"]');
+            if (cell) {
+                var input = cell.querySelector('input');
+                if (input && document.activeElement !== input) {
+                    input.focus();
+                    setTimeout(function () { input.select(); }, 0);
+                }
+            }
+        }
     });
 }
 

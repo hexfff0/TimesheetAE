@@ -28,11 +28,16 @@ function toggleCellSelection(cell) {
 }
 
 function ensureBlurForMultiSelection() {
+    // Don't blur if suppressBlurApply is set (prevents value copying during selection)
+    if (suppressBlurApply) return;
+
     var active = document.activeElement;
     if (selectedCells.size > 1 &&
         active && active.tagName === 'INPUT' &&
         active.parentElement && active.parentElement.classList.contains('data-cell')) {
+        suppressBlurApply = true;
         active.blur();
+        suppressBlurApply = false;
     }
 }
 
