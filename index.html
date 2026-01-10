@@ -10,12 +10,17 @@
 <body>
     <div id="controls">
         <div class="control-row">
-            <label>Interval:</label>
+            <label style="min-width: 5px;">Interval:</label>
             <input type="number" id="frameInterval" value="6" min="1" max="24">
-            <label style="min-width: 60px;">Type:</label>
+            <label style="min-width: 5px;">Type:</label>
             <select id="keyframeType">
                 <option value="hold">Hold</option>
                 <option value="linear">Linear</option>
+            </select>
+            <label style="min-width: 5px;">Header:</label>
+            <select id="headerMode">
+                <option value="alpha">Alphabetical</option>
+                <option value="layer">Layer Name</option>
             </select>
         </div>
         <div class="control-row">

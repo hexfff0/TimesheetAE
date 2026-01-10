@@ -12,10 +12,16 @@ function buildTable() {
     headerRow.innerHTML = '<th style="width: 50px;">Frame</th>';
     tableBody.innerHTML = '';
 
-    // Build headers (A, B, C, ...)
+    // Build headers
+    var headerMode = document.getElementById('headerMode').value;
     compInfo.layers.forEach(function (layer, index) {
         var th = document.createElement('th');
-        th.textContent = String.fromCharCode(65 + index); // A, B, C...
+        if (headerMode === 'layer') {
+            th.textContent = layer.name;
+            th.style.minWidth = '60px'; // Give a bit more room for names
+        } else {
+            th.textContent = String.fromCharCode(65 + index); // A, B, C...
+        }
         th.title = layer.name;
         headerRow.appendChild(th);
     });

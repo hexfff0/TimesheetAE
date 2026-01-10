@@ -12,6 +12,7 @@ function setupEventListeners() {
     document.getElementById('keyframeType').addEventListener('change', function () {
         updateStatus('Type: ' + this.value);
     });
+    document.getElementById('headerMode').addEventListener('change', rebuildTable);
 
     // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyDown);
