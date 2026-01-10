@@ -224,3 +224,94 @@ function updateStatus(message) {
 function clearDropPreview() {
     document.querySelectorAll('.data-cell.drop-target').forEach(function (cell) { cell.classList.remove('drop-target'); });
 }
+
+function setupCustomDropdowns() {
+    var selects = document.querySelectorAll('select');
+    selects.forEach(function (select) {
+        // Skip if already processed
+        if (select.parentNode.classList.contains('custom-select-wrapper')) return;
+
+        // Create Wrapper
+        var wrapper = document.createElement('div');
+        wrapper.className = 'custom-select-wrapper';
+        select.parentNode.insertBefore(wrapper, select);
+        wrapper.appendChild(select);
+
+        // Create Custom Select Container
+        var customSelect = document.createElement('div');
+        customSelect.className = 'custom-select';
+        wrapper.appendChild(customSelect);
+
+        // Create Trigger
+        var trigger = document.createElement('div');
+        trigger.className = 'custom-select-trigger';
+        // HTML in trigger for arrow
+        var selectedOption = select.options[select.selectedIndex];
+        trigger.innerHTML = '<span>' + selectedOption.text + '</span>' +
+            '<div class="custom-arrow">' +
+            '<svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+            '<path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+            '</svg></div>';
+        customSelect.appendChild(trigger);
+
+        // Create Options Container
+        var optionsDiv = document.createElement('div');
+        optionsDiv.className = 'custom-options';
+        customSelect.appendChild(optionsDiv);
+
+        // Populate Options
+        Array.from(select.options).forEach(function (option) {
+            var customOption = document.createElement('div');
+            customOption.className = 'custom-option';
+            customOption.textContent = option.text;
+            customOption.dataset.value = option.value;
+            if (option.selected) {
+                customOption.classList.add('selected');
+            }
+
+            customOption.addEventListener('click', function (e) {
+                // Update original select
+                select.value = this.dataset.value;
+
+                // Update trigger text
+                trigger.querySelector('span').textContent = this.textContent;
+
+                // Handle visual selection state
+                optionsDiv.querySelectorAll('.custom-option').forEach(function (opt) {
+                    opt.classList.remove('selected');
+                });
+                this.classList.add('selected');
+
+                // Close dropdown
+                customSelect.classList.remove('open');
+
+                // Trigger change event on original select so app logic runs
+                var event = new Event('change');
+                select.dispatchEvent(event);
+
+                e.stopPropagation();
+            });
+
+            optionsDiv.appendChild(customOption);
+        });
+
+        // Toggle Open/Close
+        trigger.addEventListener('click', function (e) {
+            // Close all other dropdowns
+            document.querySelectorAll('.custom-select').forEach(function (el) {
+                if (el !== customSelect) el.classList.remove('open');
+            });
+            customSelect.classList.toggle('open');
+            e.stopPropagation();
+        });
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('.custom-select-wrapper')) {
+            document.querySelectorAll('.custom-select').forEach(function (el) {
+                el.classList.remove('open');
+            });
+        }
+    });
+}

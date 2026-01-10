@@ -14,5 +14,6 @@
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', function () {
     setupEventListeners();
+    setupCustomDropdowns();
     updateStatus('Ready');
 });

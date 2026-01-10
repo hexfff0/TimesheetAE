@@ -14,6 +14,33 @@ function setupEventListeners() {
     });
     document.getElementById('headerMode').addEventListener('change', rebuildTable);
 
+    // Custom Spinner Logic
+    var spinnerUp = document.querySelector('.spinner-up');
+    var spinnerDown = document.querySelector('.spinner-down');
+    var intervalInput = document.getElementById('frameInterval');
+
+    if (spinnerUp && intervalInput) {
+        spinnerUp.addEventListener('click', function () {
+            var currentVal = parseInt(intervalInput.value) || 6;
+            var max = parseInt(intervalInput.max) || 24;
+            if (currentVal < max) {
+                intervalInput.value = currentVal + 1;
+                rebuildTable();
+            }
+        });
+    }
+
+    if (spinnerDown && intervalInput) {
+        spinnerDown.addEventListener('click', function () {
+            var currentVal = parseInt(intervalInput.value) || 6;
+            var min = parseInt(intervalInput.min) || 1;
+            if (currentVal > min) {
+                intervalInput.value = currentVal - 1;
+                rebuildTable();
+            }
+        });
+    }
+
     // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyDown);
 
