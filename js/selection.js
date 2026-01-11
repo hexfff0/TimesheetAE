@@ -92,6 +92,9 @@ function navigateCell(row, col) {
             currentCell = document.querySelector('[data-row="' + row + '"][data-col="' + col + '"]');
         }
         if (currentCell) {
+            // Re-select the cell because clearSelection() was likely called before navigation
+            selectCell(currentCell);
+
             var input = currentCell.querySelector('input');
             if (input && document.activeElement === input) {
                 // Already focused - just ensure selection

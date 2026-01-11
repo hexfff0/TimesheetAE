@@ -130,7 +130,10 @@ function setupEventListeners() {
 
 
     // Mouse up event for drag selection
-    document.addEventListener('mouseup', function () {
+    document.addEventListener('mouseup', function (e) {
+        // If clicked in controls (buttons/inputs), do not steal focus back to cell
+        if (e.target.closest('#controls')) return;
+
         // If clicked multi-select cell but didn't drag, focus that cell
         if (window.clickedMultiSelectCell && !isMoving && selectedCells.size > 1) {
             var cell = window.clickedMultiSelectCell;
