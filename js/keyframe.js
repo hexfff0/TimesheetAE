@@ -113,7 +113,7 @@ function handleCellInput(input) {
         });
         updateStatus(selectedCells.size + ' cells updated');
     } else {
-        // กรณีแก้ช่องเดียว (โค้ดเดิมของคุณ)
+        // Case: Edit single cell
         var row = parseInt(input.dataset.row);
         var layerName = input.parentElement.dataset.layerName;
         if (value === '') {

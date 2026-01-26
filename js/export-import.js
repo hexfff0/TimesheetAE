@@ -42,7 +42,7 @@ function executeExport(type) {
                     var layerData = currentData[layer.name] || {};
                     var val = "";
                     if (layerData[f] !== undefined) val = layerData[f];
-                    else if (f === Math.round(layer.outPoint * fps) + 1) val = "×";
+                    else if (f === Math.round(layer.outPoint * fps) + 1) val = "ï¿½";
                     row.push('"' + val + '"');
                 });
                 rows.push(row.join(','));
@@ -58,9 +58,9 @@ function executeExport(type) {
                 // Store keyframe data
                 Object.keys(layerData).forEach(function (k) { processed[k] = layerData[k]; });
 
-                // Add end marker ×
+                // Add end marker ï¿½
                 var marker = Math.round(layer.outPoint * fps) + 1;
-                if (processed[marker] === undefined) processed[marker] = "×";
+                if (processed[marker] === undefined) processed[marker] = "ï¿½";
 
                 // Use index as key for ordering A, B, C (0, 1, 2)
                 indexedData[index] = processed;
@@ -102,18 +102,18 @@ function parseCSVLine_Import(line) {
 }
 
 /**
- * ?????????? timeline order
- * ???????????????????????????????? ?????????????????? 1, 2, 3, ...
+     * Sort by frame number to ensure timeline order
+     * Re-index values to be sequential (1, 2, 3...)
  */
 function convertToTimelineOrder(layersData) {
     var convertedData = {};
 
-    // ??????????? column (layer)
+    // Iterate through columns (layers)
     Object.keys(layersData).forEach(function (layerIndex) {
         var layerData = layersData[layerIndex];
         var convertedLayerData = {};
 
-        // ????? array ??? [frame, value] ??????????? frame
+        // Create array of [frame, value] pairs
         var frameValuePairs = [];
         Object.keys(layerData).forEach(function (frame) {
             var value = layerData[frame];
@@ -125,26 +125,35 @@ function convertToTimelineOrder(layersData) {
             }
         });
 
-        // ???????? frame number
+        // Sort by frame number
         frameValuePairs.sort(function (a, b) {
             return a.frame - b.frame;
         });
 
-        // ????? mapping ??????????????????? (?????????????)
+        // Initialize values mapping (For Re-indexing logic)
         var valueMapping = {};
+
+        // Re-index logic (Toggle check)
+        var shouldReindex = document.getElementById('reindexToggle') ? document.getElementById('reindexToggle').checked : true;
+
         var nextNumber = 1;
 
         frameValuePairs.forEach(function (pair) {
             var originalValue = pair.value;
 
-            // ???????????????????? ???????????????????
-            if (valueMapping[originalValue] === undefined) {
-                valueMapping[originalValue] = String(nextNumber);
-                nextNumber++;
+            if (shouldReindex) {
+                // Original Behavior: Re-index 1, 2, 3...
+                if (!valueMapping[originalValue]) {
+                    valueMapping[originalValue] = String(nextNumber);
+                    nextNumber++;
+                }
+            } else {
+                // Old Behavior: Keep original value
+                valueMapping[originalValue] = originalValue;
             }
         });
 
-        // ????????????????? mapping
+        // Apply mapped values
         frameValuePairs.forEach(function (pair) {
             var newValue = valueMapping[pair.value];
             convertedLayerData[String(pair.frame)] = newValue;
@@ -174,7 +183,7 @@ function parseCSVToTimesheet_Import(csvContent, filename) {
 
         function isEndMarker(value) {
             if (!value) return false;
-            return value.indexOf('×') !== -1 ||
+            return value.indexOf('ï¿½') !== -1 ||
                 value.indexOf('ï¿½') !== -1 ||
                 value.indexOf('\xd7') !== -1 ||
                 value.indexOf('\ufffd') !== -1;
@@ -211,7 +220,7 @@ function parseCSVToTimesheet_Import(csvContent, filename) {
             }
         }
 
-        // *** ?????????? timeline order ?????????????? ***
+        // Sort by frame number to ensure timeline order
         var convertedLayersData = convertToTimelineOrder(layersData);
 
         return {
@@ -333,7 +342,7 @@ function applyAllKeyframes_Import() {
     }
 }
 
-// Parse JSON and extract × markers into endMarkers
+// Parse JSON and extract ï¿½ markers into endMarkers
 function parseJSONWithMarkers(importObj) {
     var cleanData = {};
     var endMarkers = importObj.endMarkers || {};
@@ -348,7 +357,7 @@ function parseJSONWithMarkers(importObj) {
             var valueStr = String(value); // Convert to string for checking
 
             // Check if this is an end marker
-            if (valueStr === "×" || valueStr === "ï¿½" || valueStr.indexOf('×') !== -1 || valueStr.indexOf('ï¿½') !== -1) {
+            if (valueStr === "ï¿½" || valueStr === "ï¿½" || valueStr.indexOf('ï¿½') !== -1 || valueStr.indexOf('ï¿½') !== -1) {
                 // Store as end marker for this layer
                 endMarkers[String(layerIndex)] = parseInt(frame);
             } else {
@@ -396,7 +405,7 @@ function importData() {
                         updateStatus('Invalid JSON format');
                         return;
                     }
-                    // Parse JSON and extract × markers
+                    // Parse JSON and extract ï¿½ markers
                     importObj = parseJSONWithMarkers(rawJSON);
                 }
 

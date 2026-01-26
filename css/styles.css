@@ -431,3 +431,36 @@ tbody tr.second-border {
 .data-cell.drop-target {
     background: rgba(12, 140, 233, 0.3) !important;
 }
+
+/* Toggle Styles - Hidden Checkbox */
+.toggle-wrapper input[type="checkbox"] {
+    display: none;
+}
+
+.toggle-wrapper .button-like {
+    display: inline-block;
+    padding: 6px 12px;
+    background: var(--panel-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.toggle-wrapper .button-like:hover {
+    background: var(--hover-bg);
+    border-color: #555;
+    color: var(--text-primary);
+}
+
+/* Checked State - Blue Border */
+.toggle-wrapper input[type="checkbox"]:checked+.button-like {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    background: rgba(12, 140, 233, 0.1);
+    /* Optional: slight tint to emphasize active state */
+}
