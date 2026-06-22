@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="11.0" ExtensionBundleId="com.timesheet.extension" ExtensionBundleVersion="1.1.0"
+<ExtensionManifest Version="11.0" ExtensionBundleId="com.timesheet.extension" ExtensionBundleVersion="2.0.0"
                    ExtensionBundleName="Timesheet Extension" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
-    <Extension Id="com.timesheet.panel" Version="1.1.0"/>
+    <Extension Id="com.timesheet.panel" Version="2.0.0"/>
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>

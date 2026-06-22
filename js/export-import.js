@@ -376,10 +376,67 @@ function parseJSONWithMarkers(importObj) {
     };
 }
 
+function parseXdtsToTimesheetImport(content) {
+    try {
+        var jsonStart = content.indexOf('{');
+        if (jsonStart > 0) content = content.slice(jsonStart);
+        var xdts = JSON.parse(content);
+        var timeTable = (xdts.timeTables || [])[0];
+        if (!timeTable) return null;
+        var duration = timeTable.duration || 72;
+
+        var headers = timeTable.timeTableHeaders || [];
+        var fields = timeTable.fields || [];
+        var cellField = null;
+        var cellNames = [];
+        for (var i = 0; i < fields.length; i++) {
+            if (fields[i].fieldId === 0) { cellField = fields[i]; break; }
+        }
+        for (var j = 0; j < headers.length; j++) {
+            if (headers[j].fieldId === 0) { cellNames = headers[j].names || []; break; }
+        }
+        if (!cellField) return null;
+
+        var tracks = cellField.tracks || [];
+        var layersData = {};
+        var endMarkerPerColumn = {};
+
+        for (var t = 0; t < tracks.length; t++) {
+            var track = tracks[t];
+            var colKey = String(t);
+            layersData[colKey] = {};
+            var frames = track.frames || [];
+
+            for (var k = 0; k < frames.length; k++) {
+                var fd = frames[k];
+                var frame = (Math.round(Number(fd.frame) || 0)) + 1;
+                var dataArr = fd.data || [];
+                var values = (dataArr[0] && dataArr[0].values) || [];
+                var val = String(values[0] || '').trim();
+                if (val === 'SYMBOL_NULL_CELL') {
+                    endMarkerPerColumn[colKey] = frame;
+                    continue;
+                }
+                if (val === 'SYMBOL_HYPHEN') continue;
+                if (/^\d+$/.test(val)) layersData[colKey][String(frame)] = val;
+            }
+        }
+
+        return {
+            data: layersData,
+            endMarkers: endMarkerPerColumn,
+            duration: duration,
+            frameInterval: 6,
+            keyframeType: 'hold',
+            layerNames: cellNames
+        };
+    } catch (e) { return null; }
+}
+
 function importData() {
     var input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,.csv';
+    input.accept = '.json,.csv,.xdts';
 
     syncLayers();
 
@@ -397,6 +454,12 @@ function importData() {
                     importObj = parseCSVToTimesheet_Import(content, file.name);
                     if (!importObj) {
                         updateStatus('Invalid CSV format');
+                        return;
+                    }
+                } else if (file.name.toLowerCase().endsWith('.xdts')) {
+                    importObj = parseXdtsToTimesheetImport(content);
+                    if (!importObj) {
+                        updateStatus('Invalid XDTS format');
                         return;
                     }
                 } else {

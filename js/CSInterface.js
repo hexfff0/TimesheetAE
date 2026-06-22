@@ -7,7 +7,7 @@ CSInterface.prototype.evalScript = function(script, callback) {
     if (callback === null || callback === undefined) {
         callback = function(result) {};
     }
-    window.__adobe_cep__.evalScript(script, callback);
+    window.__adobe_cep__.evalScript(HOST_FUNCS + ';' + script, callback);
 };
 
 CSInterface.prototype.addEventListener = function(type, listener, obj) {
