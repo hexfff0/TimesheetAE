@@ -510,21 +510,16 @@ function importCameraFromXdts() {
                 var timeline = xdts.timeTables && xdts.timeTables[0];
                 if (!timeline) { updateStatus('Invalid XDTS: no timeline'); return; }
 
-                var camFieldId = null;
-                var foundLabels = [];
-                (timeline.timeTableHeaders || []).forEach(function (h) {
-                    (h.names || []).forEach(function (n) {
-                        foundLabels.push(h.fieldId + ':' + n);
-                        if (n.toLowerCase().trim() === 'cel') camFieldId = h.fieldId;
-                    });
-                });
-                if (camFieldId === null) { updateStatus('No Cel field. Labels: ' + foundLabels.join(', ')); return; }
-
                 var camField = null;
                 (timeline.fields || []).forEach(function (f) {
-                    if (f.fieldId === camFieldId) camField = f;
+                    if (camField) return;
+                    var frames = f.tracks && f.tracks[0] ? f.tracks[0].frames : [];
+                    var hasMulti = frames.some(function (fr) {
+                        return fr.data && fr.data[0] && fr.data[0].values && fr.data[0].values.length > 1;
+                    });
+                    if (hasMulti) camField = f;
                 });
-                if (!camField || !camField.tracks || !camField.tracks[0]) { updateStatus('No camera track data. Field keys: ' + Object.keys(camField || {}).join(',')); return; }
+                if (!camField) { updateStatus('No camera field found'); return; }
 
                 var track = camField.tracks[0];
                 var frames = track.frames || [];
@@ -535,7 +530,7 @@ function importCameraFromXdts() {
                         var fc = t && t.frames ? t.frames.length : 0;
                         fieldSummary.push('f' + f.fieldId + '=' + fc + 'frames');
                     });
-                    updateStatus('Cel/' + camFieldId + ' empty. Fields: ' + fieldSummary.join(', '));
+                    updateStatus('Camera field ' + camField.fieldId + ' empty. Fields: ' + fieldSummary.join(', '));
                     return;
                 }
                 var keyframes = [];
@@ -545,7 +540,7 @@ function importCameraFromXdts() {
                     var v = fr.data[0].values;
                     if (v[0] === 'SYMBOL_NULL_CELL') return;
                     lastFrame = { f: fr.frame + 1, x: parseFloat(v[1]), y: parseFloat(v[2]), s: parseFloat(v[3]), r: parseFloat(v[4]) };
-                    if (v[0] === 'PAN') {
+                    if (v[0] !== 'SYMBOL_HYPHEN') {
                         keyframes.push({ f: fr.frame + 1, x: parseFloat(v[1]), y: parseFloat(v[2]), s: parseFloat(v[3]), r: parseFloat(v[4]) });
                     }
                 });
