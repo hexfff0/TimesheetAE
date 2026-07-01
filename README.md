@@ -9,7 +9,7 @@ Timesheet is an Adobe After Effects extension designed to streamline animation w
 ## Preview
 
 <p align="center">
-  <img src="/img/preview.png" alt="Timesheet Extension Preview" width="900">
+  <img src="/img/preview.png" alt="Timesheet Extension Preview" width="300">
 </p>
 
 ---
