@@ -78,17 +78,18 @@ function importDougaByIndex(data, syncedLayers, callback) {
         if (!cells.length) continue;
         if (c >= syncedLayers.length) continue;
         var layerName = syncedLayers[c].name;
+        var layerIndex = syncedLayers[c].index;
         var fpsForLayer = compInfo.fps || fps;
 
         pending++;
-        (function (name, cellsArr, fpsLocal, durFrames) {
-            var script = 'clearAllTimeRemapKeyframes("' + name + '");';
+        (function (idx, name, cellsArr, fpsLocal, durFrames) {
+            var script = 'clearAllTimeRemapKeyframes(' + idx + ',"' + name + '");';
             for (var k = 0; k < cellsArr.length; k++) {
-                script += 'addTimeRemapKeyframe_Import("' + name + '",' + cellsArr[k].frame + ',' + cellsArr[k].value + ',"hold",' + fpsLocal + ');';
+                script += 'addTimeRemapKeyframe_Import(' + idx + ',"' + name + '",' + cellsArr[k].frame + ',' + cellsArr[k].value + ',"hold",' + fpsLocal + ');';
             }
             var firstFrame = cellsArr.length ? cellsArr[0].frame : 1;
-            script += 'removeFirstKeyframeIfNeeded("' + name + '",' + firstFrame + ',' + fpsLocal + ');';
-            script += 'trimLayerDuration("' + name + '",' + durFrames + ',' + durFrames + ',' + fpsLocal + ');';
+            script += 'removeFirstKeyframeIfNeeded(' + idx + ',"' + name + '",' + firstFrame + ',' + fpsLocal + ');';
+            script += 'trimLayerDuration(' + idx + ',"' + name + '",' + durFrames + ',' + durFrames + ',' + fpsLocal + ');';
             script += '"true"';
             csInterface.evalScript(script, function (r) {
                 if (r === 'true') totalKeys += cellsArr.length;
@@ -96,7 +97,7 @@ function importDougaByIndex(data, syncedLayers, callback) {
                 pending--;
                 if (pending === 0) { loadExistingKeyframes(); done(); }
             });
-        })(layerName, cells, fpsForLayer, cutDuration);
+        })(layerIndex, layerName, cells, fpsForLayer, cutDuration);
     }
 
     if (pending === 0) done('No columns matched synced layers');

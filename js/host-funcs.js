@@ -56,7 +56,7 @@ function getSelectedLayersInfo() {
 }
 
 // Add or update time remap keyframe
-function addTimeRemapKeyframe(layerName, frame, value, keyframeType, compFps) {
+function addTimeRemapKeyframe(layerIndex, layerName, frame, value, keyframeType, compFps) {
     try {
         app.beginUndoGroup("Add Time Remap Keyframe");
 
@@ -65,12 +65,17 @@ function addTimeRemapKeyframe(layerName, frame, value, keyframeType, compFps) {
             return "Error: No active composition";
         }
 
-        // Find layer by name
+        // Find layer by index first, fallback to name
         var layer = null;
-        for (var i = 1; i <= comp.numLayers; i++) {
-            if (comp.layer(i).name === layerName) {
-                layer = comp.layer(i);
-                break;
+        if (layerIndex !== undefined && layerIndex > 0) {
+            layer = comp.layer(layerIndex);
+        }
+        if (!layer) {
+            for (var i = 1; i <= comp.numLayers; i++) {
+                if (comp.layer(i).name === layerName) {
+                    layer = comp.layer(i);
+                    break;
+                }
             }
         }
 
@@ -162,7 +167,7 @@ function addTimeRemapKeyframe(layerName, frame, value, keyframeType, compFps) {
 }
 
 // Delete time remap keyframe
-function deleteTimeRemapKeyframe(layerName, frame) {
+function deleteTimeRemapKeyframe(layerIndex, layerName, frame) {
     try {
         app.beginUndoGroup("Delete Time Remap Keyframe");
 
@@ -171,12 +176,17 @@ function deleteTimeRemapKeyframe(layerName, frame) {
             return "Error: No active composition";
         }
 
-        // Find layer
+        // Find layer by index first, fallback to name
         var layer = null;
-        for (var i = 1; i <= comp.numLayers; i++) {
-            if (comp.layer(i).name === layerName) {
-                layer = comp.layer(i);
-                break;
+        if (layerIndex !== undefined && layerIndex > 0) {
+            layer = comp.layer(layerIndex);
+        }
+        if (!layer) {
+            for (var i = 1; i <= comp.numLayers; i++) {
+                if (comp.layer(i).name === layerName) {
+                    layer = comp.layer(i);
+                    break;
+                }
             }
         }
 
@@ -207,7 +217,7 @@ function deleteTimeRemapKeyframe(layerName, frame) {
 }
 
 // Read existing time remap keyframes
-function readTimeRemapKeyframes(layerName) {
+function readTimeRemapKeyframes(layerIndex, layerName) {
     try {
         var comp = app.project.activeItem;
         if (!comp || !(comp instanceof CompItem)) {
@@ -215,10 +225,15 @@ function readTimeRemapKeyframes(layerName) {
         }
 
         var layer = null;
-        for (var i = 1; i <= comp.numLayers; i++) {
-            if (comp.layer(i).name === layerName) {
-                layer = comp.layer(i);
-                break;
+        if (layerIndex !== undefined && layerIndex > 0) {
+            layer = comp.layer(layerIndex);
+        }
+        if (!layer) {
+            for (var i = 1; i <= comp.numLayers; i++) {
+                if (comp.layer(i).name === layerName) {
+                    layer = comp.layer(i);
+                    break;
+                }
             }
         }
 
@@ -264,7 +279,7 @@ function readTimeRemapKeyframes(layerName) {
 }
 
 // Clear all time remap keyframes for a layer (for import)
-function clearAllTimeRemapKeyframes(layerName) {
+function clearAllTimeRemapKeyframes(layerIndex, layerName) {
     try {
         app.beginUndoGroup("Clear Time Remap Keyframes");
 
@@ -274,10 +289,15 @@ function clearAllTimeRemapKeyframes(layerName) {
         }
 
         var layer = null;
-        for (var i = 1; i <= comp.numLayers; i++) {
-            if (comp.layer(i).name === layerName) {
-                layer = comp.layer(i);
-                break;
+        if (layerIndex !== undefined && layerIndex > 0) {
+            layer = comp.layer(layerIndex);
+        }
+        if (!layer) {
+            for (var i = 1; i <= comp.numLayers; i++) {
+                if (comp.layer(i).name === layerName) {
+                    layer = comp.layer(i);
+                    break;
+                }
             }
         }
 
@@ -308,7 +328,7 @@ function clearAllTimeRemapKeyframes(layerName) {
 }
 
 // Add keyframe for IMPORT ONLY (1-based frame)
-function addTimeRemapKeyframe_Import(layerName, frame, value, keyframeType, compFps) {
+function addTimeRemapKeyframe_Import(layerIndex, layerName, frame, value, keyframeType, compFps) {
     try {
         app.beginUndoGroup("Add Time Remap Keyframe Import");
 
@@ -318,10 +338,15 @@ function addTimeRemapKeyframe_Import(layerName, frame, value, keyframeType, comp
         }
 
         var layer = null;
-        for (var i = 1; i <= comp.numLayers; i++) {
-            if (comp.layer(i).name === layerName) {
-                layer = comp.layer(i);
-                break;
+        if (layerIndex !== undefined && layerIndex > 0) {
+            layer = comp.layer(layerIndex);
+        }
+        if (!layer) {
+            for (var i = 1; i <= comp.numLayers; i++) {
+                if (comp.layer(i).name === layerName) {
+                    layer = comp.layer(i);
+                    break;
+                }
             }
         }
 
@@ -389,7 +414,7 @@ function addTimeRemapKeyframe_Import(layerName, frame, value, keyframeType, comp
 }
 
 // Remove first keyframe if CSV doesn't start at frame 1
-function removeFirstKeyframeIfNeeded(layerName, firstFrameFromCSV, fps) {
+function removeFirstKeyframeIfNeeded(layerIndex, layerName, firstFrameFromCSV, fps) {
     try {
         app.beginUndoGroup("Remove First Keyframe");
 
@@ -399,10 +424,15 @@ function removeFirstKeyframeIfNeeded(layerName, firstFrameFromCSV, fps) {
         }
 
         var layer = null;
-        for (var i = 1; i <= comp.numLayers; i++) {
-            if (comp.layer(i).name === layerName) {
-                layer = comp.layer(i);
-                break;
+        if (layerIndex !== undefined && layerIndex > 0) {
+            layer = comp.layer(layerIndex);
+        }
+        if (!layer) {
+            for (var i = 1; i <= comp.numLayers; i++) {
+                if (comp.layer(i).name === layerName) {
+                    layer = comp.layer(i);
+                    break;
+                }
             }
         }
 
@@ -434,7 +464,7 @@ function removeFirstKeyframeIfNeeded(layerName, firstFrameFromCSV, fps) {
 }
 
 // Trim layer duration
-function trimLayerDuration(layerName, endFrame, maxFrame, fps) {
+function trimLayerDuration(layerIndex, layerName, endFrame, maxFrame, fps) {
     try {
         app.beginUndoGroup("Trim Layer Duration");
 
@@ -444,10 +474,15 @@ function trimLayerDuration(layerName, endFrame, maxFrame, fps) {
         }
 
         var layer = null;
-        for (var i = 1; i <= comp.numLayers; i++) {
-            if (comp.layer(i).name === layerName) {
-                layer = comp.layer(i);
-                break;
+        if (layerIndex !== undefined && layerIndex > 0) {
+            layer = comp.layer(layerIndex);
+        }
+        if (!layer) {
+            for (var i = 1; i <= comp.numLayers; i++) {
+                if (comp.layer(i).name === layerName) {
+                    layer = comp.layer(i);
+                    break;
+                }
             }
         }
 
@@ -505,8 +540,8 @@ function removeAllKeyframes() {
             // Success: Reset local data
             currentData = {};
             if (compInfo && compInfo.layers) {
-                compInfo.layers.forEach(function (layer) {
-                    currentData[layer.name] = {};
+                compInfo.layers.forEach(function (layer, i) {
+                    currentData[i] = {};
                 });
             }
             rebuildTable();
@@ -522,7 +557,7 @@ function removeAllKeyframes() {
 }
 
 // Delete time remap keyframe - IMPROVED to preserve markers
-function deleteTimeRemapKeyframe(layerName, frame) {
+function deleteTimeRemapKeyframe(layerIndex, layerName, frame) {
     try {
         app.beginUndoGroup("Delete Time Remap Keyframe");
 
@@ -531,12 +566,17 @@ function deleteTimeRemapKeyframe(layerName, frame) {
             return "Error: No active composition";
         }
 
-        // Find layer
+        // Find layer by index first, fallback to name
         var layer = null;
-        for (var i = 1; i <= comp.numLayers; i++) {
-            if (comp.layer(i).name === layerName) {
-                layer = comp.layer(i);
-                break;
+        if (layerIndex !== undefined && layerIndex > 0) {
+            layer = comp.layer(layerIndex);
+        }
+        if (!layer) {
+            for (var i = 1; i <= comp.numLayers; i++) {
+                if (comp.layer(i).name === layerName) {
+                    layer = comp.layer(i);
+                    break;
+                }
             }
         }
 
@@ -602,7 +642,7 @@ function deleteTimeRemapKeyframe(layerName, frame) {
 }
 
 // Clean up temporary keyframes (both markers and temp placeholders)
-function cleanupTemporaryKeyframes(layerName, compFps) {
+function cleanupTemporaryKeyframes(layerIndex, layerName, compFps) {
     try {
         app.beginUndoGroup("Cleanup Temporary Keyframes");
 
@@ -612,10 +652,15 @@ function cleanupTemporaryKeyframes(layerName, compFps) {
         }
 
         var layer = null;
-        for (var i = 1; i <= comp.numLayers; i++) {
-            if (comp.layer(i).name === layerName) {
-                layer = comp.layer(i);
-                break;
+        if (layerIndex !== undefined && layerIndex > 0) {
+            layer = comp.layer(layerIndex);
+        }
+        if (!layer) {
+            for (var i = 1; i <= comp.numLayers; i++) {
+                if (comp.layer(i).name === layerName) {
+                    layer = comp.layer(i);
+                    break;
+                }
             }
         }
 
@@ -800,4 +845,99 @@ function importDougaData(jsonStr) {
     app.endUndoGroup();
     return JSON.stringify({ layerCount: layerCount, keyframeCount: totalKeys });
 }
+
+function createCameraSolid(w, h, dataJson) {
+    var comp = app.project.activeItem;
+    if (!(comp instanceof CompItem)) return "Error: No active comp";
+    var data = eval(dataJson);
+    if (!data || !data.length) return "Error: No camera data";
+    app.beginUndoGroup("Import XDTS Camera");
+    var solid = comp.layers.addSolid([1, 1, 1], "camera", w, h, 1.0);
+    solid.guideLayer = true;
+    solid.label = 1;
+    var pos = solid.property("Position");
+    var scl = solid.property("Scale");
+    var rot = solid.property("Rotation");
+    for (var j = 0; j < data.length; j++) {
+        var d = data[j];
+        var t = (d.f - 1) * comp.frameDuration;
+        pos.setValueAtTime(t, [d.x, d.y]);
+        scl.setValueAtTime(t, [d.s, d.s, 100]);
+        rot.setValueAtTime(t, d.r);
+    }
+    var maskGrp = solid.property("ADBE Mask Parade");
+    var mask = maskGrp.addProperty("ADBE Mask Atom");
+    mask.name = "Mask 1";
+    var shape = new Shape();
+    shape.vertices = [[0, 0], [w, 0], [w, h], [0, h]];
+    shape.closed = true;
+    mask.property("ADBE Mask Shape").setValue(shape);
+    mask.inverted = true;
+    var fx = solid.property("ADBE Effect Parade");
+    var stroke = fx.addProperty("Stroke");
+    stroke.property("ADBE Stroke-0001").setValue(1);
+    stroke.property("ADBE Stroke-0010").setValue(1);
+    stroke.property("ADBE Stroke-0002").setValue([0, 80/255, 1]);
+    stroke.property("ADBE Stroke-0003").setValue(5.0);
+    stroke.property("ADBE Stroke-0004").setValue(100);
+    stroke.property("ADBE Stroke-0005").setValue(100);
+    stroke.property("ADBE Stroke-0008").setValue(0);
+    stroke.property("ADBE Stroke-0009").setValue(100);
+    stroke.property("ADBE Stroke-0006").setValue(0);
+    stroke.property("ADBE Stroke-0007").setValue(3);
+    app.endUndoGroup();
+    return "true";
+}
+
+function createCompFromSelection(w, h) {
+    var sel = app.project.selection;
+    if (!sel || sel.length === 0) return "Error: No item selected";
+    var comp = sel[0];
+    if (!(comp instanceof CompItem)) return "Error: Selected item is not a comp";
+    app.beginUndoGroup("New Comp from Selection");
+    var newComp = app.project.items.addComp("Camera", w, h, 1, comp.duration, comp.frameRate);
+    var preCompLayer = newComp.layers.add(comp);
+    var scaleExpr = 'transform.scale;\\n' +
+        'for (var i = 1; i < thisLayer.source.numLayers + 1; ++i) {\\n' +
+        'bclr = thisLayer.source.layer(i);\\n' +
+        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
+        'bc = thisLayer.source.layer(i);\\n' +
+        'scl = bc.scale.valueAtTime(time-thisLayer.startTime) * 0.01;\\n' +
+        'while (true){\\n' +
+        'if(!bc.hasParent) break;\\n' +
+        'bc = bc.parent;\\n' +
+        'for (var i=0; i < 2; i++) {scl[i]*=bc.scale.valueAtTime(time-thisLayer.startTime)[i]/100}\\n' +
+        '}\\n' +
+        '[1/scl[0]*transform.scale[0],1/scl[1]*transform.scale[1]]\\n' +
+        'break;}transform.scale;}';
+    var posExpr = 'transform.position;\\n' +
+        'for (var i = 1; i < thisLayer.source.numLayers + 1; ++i) {\\n' +
+        'bclr = thisLayer.source.layer(i);\\n' +
+        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
+        'thisLayer.source.layer(i).transform.anchorPoint.valueAtTime(time-thisLayer.startTime);\\n' +
+        'break;}transform.position;}';
+    var rotExpr = 'transform.rotation;\\n' +
+        'for (var i = 1; i < thisLayer.source.numLayers + 1; ++i) {\\n' +
+        'bclr = thisLayer.source.layer(i);\\n' +
+        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
+        'rt = thisLayer.source.layer(i).toWorldVec([1,0,0],time-thisLayer.startTime); -radiansToDegrees(Math.atan2(rt[1],rt[0]));\\n' +
+        'break;}transform.rotation;}';
+    var anchorExpr = 'transform.anchorPoint;\\n' +
+        'for (var i = 1; i < thisLayer.source.numLayers + 1; ++i) {\\n' +
+        'bclr = thisLayer.source.layer(i);\\n' +
+        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
+        'bc = thisLayer.source.layer(i);\\n' +
+        'bc.toWorld(bc.anchorPoint.valueAtTime(time-thisLayer.startTime));\\n' +
+        'break;}transform.anchorPoint;}';
+    var t = preCompLayer.property("ADBE Transform Group");
+    if (t) {
+        try { t.property("ADBE Scale").expression = scaleExpr; } catch (e) {}
+        try { t.property("ADBE Position").expression = posExpr; } catch (e) {}
+        try { t.property("ADBE Rotate Z").expression = rotExpr; } catch (e) {}
+        try { t.property("ADBE Anchor Point").expression = anchorExpr; } catch (e) {}
+    }
+    app.endUndoGroup();
+    return "true";
+}
+
 `;

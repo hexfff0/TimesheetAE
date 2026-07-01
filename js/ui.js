@@ -62,6 +62,7 @@ function buildTable() {
             td.dataset.row = frame;
             td.dataset.col = colIndex;
             td.dataset.layerName = layer.name;
+            td.dataset.aeLayerIndex = layer.index;
 
             var input = document.createElement('input');
             input.type = 'text';
@@ -69,12 +70,7 @@ function buildTable() {
             input.dataset.col = colIndex;
 
             // Check if there's existing data
-            if (currentData[layer.name] && currentData[layer.name][frame] !== undefined) {
-                input.value = currentData[layer.name][frame];
-            }
-
-            // เป็นแบบนี้ (เช็คทั้ง Index และ Name):
-            var layerData = currentData[colIndex] || currentData[layer.name];
+            var layerData = currentData[colIndex];
             if (layerData && layerData[frame] !== undefined) {
                 input.value = layerData[frame];
             }

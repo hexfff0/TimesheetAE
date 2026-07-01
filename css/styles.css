@@ -39,25 +39,90 @@ body {
 /* Controls Section */
 #controls {
     background: var(--panel-bg);
-    padding: 12px 16px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 6px;
+}
+
+.toolbar-section {
+    display: flex;
+    flex-direction: column;
 }
 
 .control-row {
     display: flex;
-    gap: 16px;
+    gap: 8px;
     align-items: center;
+}
+
+/* Buttons */
+.btn {
+    padding: 4px 10px;
+    background: var(--panel-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.15s;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.btn:hover {
+    background: var(--hover-bg);
+    border-color: #555;
+}
+
+.btn:active {
+    background: #1a1a1a;
+    transform: translateY(1px);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: #0a7ad0;
+    border-color: #0a7ad0;
+}
+
+.btn-ghost {
+    background: transparent;
+    border-color: transparent;
+}
+
+.btn-ghost:hover {
+    background: var(--hover-bg);
+    border-color: transparent;
+}
+
+/* Toolbar Divider */
+.toolbar-divider {
+    display: inline-block;
+    width: 1px;
+    height: 18px;
+    background: var(--border-color);
+    flex-shrink: 0;
 }
 
 /* Input Groups */
 .input-group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 label {
@@ -65,6 +130,7 @@ label {
     color: var(--text-secondary);
     font-size: 11px;
     cursor: default;
+    white-space: nowrap;
 }
 
 /* Custom Number Input */
@@ -75,8 +141,8 @@ label {
     background: var(--input-bg);
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    width: 60px;
-    transition: border-color 0.2s;
+    width: 56px;
+    transition: border-color 0.15s;
 }
 
 .number-input-wrapper:hover {
@@ -92,7 +158,7 @@ input[type="number"] {
     border: none;
     color: var(--text-primary);
     font-size: 12px;
-    padding: 6px 4px 6px 8px;
+    padding: 4px 2px 4px 6px;
     width: 100%;
     -moz-appearance: textfield;
     appearance: textfield;
@@ -112,12 +178,12 @@ input[type="number"]:focus {
     display: flex;
     flex-direction: column;
     border-left: 1px solid var(--border-color);
-    width: 20px;
+    width: 18px;
 }
 
 .spinner-up,
 .spinner-down {
-    height: 14px;
+    height: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -140,13 +206,16 @@ input[type="number"]:focus {
 /* Custom Select Styles (JS replaced) */
 select {
     display: none;
-    /* Hide original select */
+}
+
+.select-wrapper {
+    position: relative;
 }
 
 .custom-select-wrapper {
     position: relative;
     user-select: none;
-    min-width: 100px;
+    min-width: 90px;
 }
 
 .custom-select {
@@ -160,15 +229,15 @@ select {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 10px;
-    font-size: 12px;
+    padding: 4px 8px;
+    font-size: 11px;
     font-weight: 400;
     color: var(--text-primary);
     background: var(--input-bg);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.15s;
 }
 
 .custom-select-trigger:hover {
@@ -186,9 +255,9 @@ select {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-left: 8px;
+    margin-left: 6px;
     color: var(--text-secondary);
-    transition: transform 0.2s;
+    transition: transform 0.15s;
 }
 
 .custom-select.open .custom-arrow {
@@ -210,12 +279,12 @@ select {
     border-bottom-left-radius: 4px;
     border-bottom-right-radius: 4px;
     background: var(--panel-bg);
-    transition: all 0.2s;
+    transition: all 0.15s;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
     z-index: 100;
-    transform: translateY(-10px);
+    transform: translateY(-8px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
@@ -229,13 +298,12 @@ select {
 .custom-option {
     position: relative;
     display: block;
-    padding: 8px 10px;
-    font-size: 12px;
+    padding: 6px 8px;
+    font-size: 11px;
     font-weight: 400;
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 0.2s;
-    border-top: 1px solid transparent;
+    transition: all 0.15s;
 }
 
 .custom-option:hover {
@@ -249,10 +317,49 @@ select {
     font-weight: 600;
 }
 
+/* Camera Input Group */
+.cam-input-group {
+    gap: 4px;
+}
 
-/* Buttons */
-button {
-    padding: 6px 12px;
+.cam-input {
+    width: 50px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 11px;
+    padding: 4px 6px;
+    text-align: center;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.cam-input::-webkit-outer-spin-button,
+.cam-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.cam-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+}
+
+.cam-sep {
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1;
+}
+
+/* Toggle Styles */
+.toggle-wrapper input[type="checkbox"] {
+    display: none;
+}
+
+.toggle-wrapper .toggle-label {
+    display: inline-block;
+    padding: 4px 10px;
     background: var(--panel-bg);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
@@ -260,22 +367,20 @@ button {
     cursor: pointer;
     font-size: 11px;
     font-weight: 500;
-    transition: all 0.2s;
+    transition: all 0.15s;
+    user-select: none;
+    line-height: 1.4;
 }
 
-button:hover {
+.toggle-wrapper .toggle-label:hover {
     background: var(--hover-bg);
     border-color: #555;
 }
 
-button:active {
-    background: #1a1a1a;
-    transform: translateY(1px);
-}
-
-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+.toggle-wrapper input[type="checkbox"]:checked + .toggle-label {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    background: rgba(12, 140, 233, 0.1);
 }
 
 /* Table Section */
@@ -316,11 +421,9 @@ tbody td {
     border-bottom: 1px solid var(--border-color);
     padding: 0;
     height: 26px;
-    /* Slightly taller for better touch targets/visuals */
     position: relative;
 }
 
-/* Labels */
 tbody td.frame-label {
     background: #1e1e1e;
     text-align: right;
@@ -343,7 +446,6 @@ tbody td.second-label {
     border-right-color: #2a2a2a;
 }
 
-/* Data Cells */
 tbody td.data-cell {
     background: var(--row-bg);
     cursor: cell;
@@ -373,11 +475,9 @@ tbody td.data-cell.selected {
 }
 
 tbody td.data-cell.selected input {
-    /* No special background, parent handles it */
     background: transparent;
 }
 
-/* Borders */
 tbody tr.thick-border {
     border-top: 2px solid #505050;
 }
@@ -430,37 +530,4 @@ tbody tr.second-border {
 
 .data-cell.drop-target {
     background: rgba(12, 140, 233, 0.3) !important;
-}
-
-/* Toggle Styles - Hidden Checkbox */
-.toggle-wrapper input[type="checkbox"] {
-    display: none;
-}
-
-.toggle-wrapper .button-like {
-    display: inline-block;
-    padding: 6px 12px;
-    background: var(--panel-bg);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 11px;
-    font-weight: 500;
-    transition: all 0.2s;
-    user-select: none;
-}
-
-.toggle-wrapper .button-like:hover {
-    background: var(--hover-bg);
-    border-color: #555;
-    color: var(--text-primary);
-}
-
-/* Checked State - Blue Border */
-.toggle-wrapper input[type="checkbox"]:checked+.button-like {
-    border-color: var(--accent-color);
-    color: var(--accent-color);
-    background: rgba(12, 140, 233, 0.1);
-    /* Optional: slight tint to emphasize active state */
 }

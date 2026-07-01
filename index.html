@@ -9,57 +9,77 @@
 
 <body>
     <div id="controls">
-        <div class="control-row">
-            <div class="input-group">
-                <label for="frameInterval">Interval</label>
-                <div class="number-input-wrapper">
-                    <input type="number" id="frameInterval" value="6" min="1" max="24">
-                    <div class="spinner-arrows">
-                        <div class="spinner-up">
-                            <svg width="8" height="5" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M1 5L5 1L9 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                                    stroke-linejoin="round" />
-                            </svg>
-                        </div>
-                        <div class="spinner-down">
-                            <svg width="8" height="5" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M9 1L5 5L1 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                                    stroke-linejoin="round" />
-                            </svg>
+        <div class="toolbar-section">
+            <div class="control-row">
+                <div class="input-group">
+                    <label for="frameInterval">Interval</label>
+                    <div class="number-input-wrapper">
+                        <input type="number" id="frameInterval" value="6" min="1" max="24">
+                        <div class="spinner-arrows">
+                            <div class="spinner-up">
+                                <svg width="8" height="5" viewBox="0 0 10 6" fill="none">
+                                    <path d="M1 5L5 1L9 5" stroke="currentColor" stroke-width="1.5"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </div>
+                            <div class="spinner-down">
+                                <svg width="8" height="5" viewBox="0 0 10 6" fill="none">
+                                    <path d="M9 1L5 5L1 1" stroke="currentColor" stroke-width="1.5"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="input-group">
-                <label for="keyframeType">Type</label>
-                <div class="select-wrapper">
-                    <select id="keyframeType">
-                        <option value="hold">Hold</option>
-                        <option value="linear">Linear</option>
-                    </select>
+                <div class="input-group">
+                    <label for="keyframeType">Type</label>
+                    <div class="select-wrapper">
+                        <select id="keyframeType">
+                            <option value="hold">Hold</option>
+                            <option value="linear">Linear</option>
+                        </select>
+                    </div>
                 </div>
-            </div>
 
-            <div class="input-group">
-                <label for="headerMode">Header</label>
-                <div class="select-wrapper">
-                    <select id="headerMode">
-                        <option value="alpha">Alphabetical</option>
-                        <option value="layer">Layer Name</option>
-                    </select>
+                <div class="input-group">
+                    <label for="headerMode">Header</label>
+                    <div class="select-wrapper">
+                        <select id="headerMode">
+                            <option value="alpha">Alphabetical</option>
+                            <option value="layer">Layer Name</option>
+                        </select>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="control-row">
-            <button id="syncBtn">Sync</button>
-            <button id="clearBtn">Clear</button>
-            <button id="removeAllBtn">Remove All</button>
-            <button id="exportBtn">Export</button>
-            <button id="importBtn">Import</button>
-            <div class="toggle-wrapper">
-                <input type="checkbox" id="reindexToggle">
-                <label for="reindexToggle" class="button-like">Re-index</label>
+
+        <div class="toolbar-section">
+            <div class="control-row">
+                <button class="btn btn-primary" id="syncBtn">Sync</button>
+                <button class="btn btn-ghost" id="clearBtn">Clear</button>
+                <button class="btn btn-ghost" id="removeAllBtn">Remove All</button>
+                <span class="toolbar-divider"></span>
+                <button class="btn btn-ghost" id="exportBtn">Export</button>
+                <button class="btn btn-ghost" id="importBtn">Import</button>
+                <span class="toolbar-divider"></span>
+                <div class="toggle-wrapper">
+                    <input type="checkbox" id="reindexToggle">
+                    <label for="reindexToggle" class="toggle-label">Re-index</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="toolbar-section">
+            <div class="control-row">
+                <div class="input-group cam-input-group">
+                    <label for="camWidth">Cam</label>
+                    <input type="number" class="cam-input" id="camWidth" value="1920" min="1" max="99999">
+                    <span class="cam-sep">&times;</span>
+                    <input type="number" class="cam-input" id="camHeight" value="1080" min="1" max="99999">
+                </div>
+                <button class="btn btn-ghost" id="importCamXdtsBtn">Import Camera</button>
+                <button class="btn btn-ghost" id="newCompFromSelBtn">Camera Comp</button>
             </div>
         </div>
     </div>

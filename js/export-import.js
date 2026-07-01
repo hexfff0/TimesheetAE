@@ -38,8 +38,8 @@ function executeExport(type) {
 
             for (var f = 1; f <= totalFrames; f++) {
                 var row = ['"' + f + '"'];
-                compInfo.layers.forEach(function (layer) {
-                    var layerData = currentData[layer.name] || {};
+                compInfo.layers.forEach(function (layer, i) {
+                    var layerData = currentData[i] || {};
                     var val = "";
                     if (layerData[f] !== undefined) val = layerData[f];
                     else if (f === Math.round(layer.outPoint * fps) + 1) val = "�";
@@ -52,7 +52,7 @@ function executeExport(type) {
             // --- LOGIC JSON ---
             var indexedData = {};
             compInfo.layers.forEach(function (layer, index) {
-                var layerData = currentData[layer.name] || {};
+                var layerData = currentData[index] || {};
                 var processed = {};
 
                 // Store keyframe data
@@ -240,9 +240,9 @@ function parseCSVToTimesheet_Import(csvContent, filename) {
 }
 
 // Add keyframe for IMPORT (uses addTimeRemapKeyframe_Import in hostscript)
-function addKeyframe_Import(layerName, frame, value) {
+function addKeyframe_Import(layerIndex, layerName, frame, value) {
     var keyframeType = document.getElementById('keyframeType').value;
-    var scriptCall = 'addTimeRemapKeyframe_Import("' + layerName + '", ' + frame + ', ' +
+    var scriptCall = 'addTimeRemapKeyframe_Import(' + layerIndex + ',"' + layerName + '", ' + frame + ', ' +
         value + ', "' + keyframeType + '", ' + compInfo.fps + ')';
     csInterface.evalScript(scriptCall, function (result) {
         if (result && result !== 'true') {
@@ -257,8 +257,8 @@ function applyAllKeyframes_Import() {
     var layersProcessed = 0;
     var totalKeyframes = 0;
 
-    compInfo.layers.forEach(function (layer) {
-        csInterface.evalScript('clearAllTimeRemapKeyframes("' + layer.name + '")', function () {
+    compInfo.layers.forEach(function (layer, i) {
+        csInterface.evalScript('clearAllTimeRemapKeyframes(' + layer.index + ',"' + layer.name + '")', function () {
             layersProcessed++;
             if (layersProcessed === compInfo.layers.length) {
                 applyNewKeyframes_Import();
@@ -275,7 +275,7 @@ function applyAllKeyframes_Import() {
         var firstFramePerLayer = {};
 
         compInfo.layers.forEach(function (layer, index) {
-            var layerData = currentData[index] || currentData[layer.name];
+            var layerData = currentData[index];
             if (layerData) {
                 var frames = Object.keys(layerData).map(function (f) { return parseInt(f); }).sort(function (a, b) { return a - b; });
                 if (frames.length > 0) {
@@ -283,7 +283,7 @@ function applyAllKeyframes_Import() {
                 }
                 Object.keys(layerData).forEach(function (frame) {
                     var value = layerData[frame];
-                    addKeyframe_Import(layer.name, parseInt(frame), value);
+                    addKeyframe_Import(layer.index, layer.name, parseInt(frame), value);
                     totalKeyframes++;
                 });
             }
@@ -293,7 +293,7 @@ function applyAllKeyframes_Import() {
         compInfo.layers.forEach(function (layer) {
             var firstFrame = firstFramePerLayer[layer.name] || 1;
             csInterface.evalScript(
-                'removeFirstKeyframeIfNeeded("' + layer.name + '", ' + firstFrame + ', ' + fps + ')',
+                'removeFirstKeyframeIfNeeded(' + layer.index + ',"' + layer.name + '", ' + firstFrame + ', ' + fps + ')',
                 function () {
                     layersCleanedUp++;
                     if (layersCleanedUp === compInfo.layers.length) {
@@ -308,7 +308,7 @@ function applyAllKeyframes_Import() {
             compInfo.layers.forEach(function (layer, index) {
                 var endFrame = endMarkers[String(index)] || 0;
                 csInterface.evalScript(
-                    'trimLayerDuration("' + layer.name + '", ' + endFrame + ', ' + maxFrame + ', ' + fps + ')',
+                    'trimLayerDuration(' + layer.index + ',"' + layer.name + '", ' + endFrame + ', ' + maxFrame + ', ' + fps + ')',
                     function () {
                         layersTrimmed++;
                         if (layersTrimmed === compInfo.layers.length) {

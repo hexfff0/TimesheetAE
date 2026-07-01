@@ -22,9 +22,9 @@ function syncLayers() {
             compInfo = data;
             currentData = {};
 
-            // Initialize data structure
-            compInfo.layers.forEach(function (layer) {
-                currentData[layer.name] = {};
+            // Initialize data structure (use array index as key)
+            compInfo.layers.forEach(function (layer, i) {
+                currentData[i] = {};
             });
 
             // Load existing keyframes
@@ -39,9 +39,9 @@ function syncLayers() {
 function loadExistingKeyframes() {
     var layersProcessed = 0;
 
-    compInfo.layers.forEach(function (layer) {
+    compInfo.layers.forEach(function (layer, i) {
         if (layer.hasTimeRemap) {
-            csInterface.evalScript('readTimeRemapKeyframes("' + layer.name + '")', function (result) {
+            csInterface.evalScript('readTimeRemapKeyframes(' + layer.index + ',"' + layer.name + '")', function (result) {
                 try {
                     var data = JSON.parse(result);
 
@@ -49,7 +49,7 @@ function loadExistingKeyframes() {
                         data.keyframes.forEach(function (kf) {
                             // frame from JSX is 0-based, convert to 1-based for UI
                             // value from JSX is already 1-based
-                            currentData[layer.name][kf.frame + 1] = kf.value;
+                            currentData[i][kf.frame + 1] = kf.value;
                         });
                     }
                 } catch (e) {
@@ -97,17 +97,19 @@ function handleCellInput(input) {
 
             if (cell) {
                 var targetInput = cell.querySelector('input');
+                var colIdx = cell.dataset.col;
                 var layerName = cell.dataset.layerName;
+                var layerIndex = compInfo.layers[colIdx].index;
 
                 targetInput.value = value; // Set the same value for all
 
                 // Update data and AE
                 if (value === '') {
-                    delete currentData[layerName][row];
-                    deleteKeyframe(layerName, row - 1);
+                    delete currentData[colIdx][row];
+                    deleteKeyframe(layerIndex, layerName, row - 1);
                 } else {
-                    currentData[layerName][row] = value;
-                    addKeyframe(layerName, row - 1, value);
+                    currentData[colIdx][row] = value;
+                    addKeyframe(layerIndex, layerName, row - 1, value);
                 }
             }
         });
@@ -115,21 +117,23 @@ function handleCellInput(input) {
     } else {
         // Case: Edit single cell
         var row = parseInt(input.dataset.row);
+        var col = parseInt(input.dataset.col);
         var layerName = input.parentElement.dataset.layerName;
+        var layerIndex = compInfo.layers[col].index;
         if (value === '') {
-            delete currentData[layerName][row];
-            deleteKeyframe(layerName, row - 1);
+            delete currentData[col][row];
+            deleteKeyframe(layerIndex, layerName, row - 1);
         } else {
-            currentData[layerName][row] = value;
-            addKeyframe(layerName, row - 1, value);
+            currentData[col][row] = value;
+            addKeyframe(layerIndex, layerName, row - 1, value);
         }
     }
 }
 
-function addKeyframe(layerName, frame, value) {
+function addKeyframe(layerIndex, layerName, frame, value) {
     var keyframeType = document.getElementById('keyframeType').value;
 
-    var scriptCall = 'addTimeRemapKeyframe("' + layerName + '", ' + frame + ', ' +
+    var scriptCall = 'addTimeRemapKeyframe(' + layerIndex + ',"' + layerName + '", ' + frame + ', ' +
         value + ', "' + keyframeType + '", ' + compInfo.fps + ')';
 
     csInterface.evalScript(scriptCall, function (result) {
@@ -140,8 +144,8 @@ function addKeyframe(layerName, frame, value) {
     });
 }
 
-function deleteKeyframe(layerName, frame) {
-    var scriptCall = 'deleteTimeRemapKeyframe("' + layerName + '", ' + frame + ')';
+function deleteKeyframe(layerIndex, layerName, frame) {
+    var scriptCall = 'deleteTimeRemapKeyframe(' + layerIndex + ',"' + layerName + '", ' + frame + ')';
 
     csInterface.evalScript(scriptCall, function (result) {
         if (result && result !== 'true') {
@@ -160,7 +164,7 @@ function removeAllKeyframes() {
             // Reset UI and local data on success
             currentData = {};
             if (compInfo && compInfo.layers) {
-                compInfo.layers.forEach(l => currentData[l.name] = {});
+                compInfo.layers.forEach(function(l, i) { currentData[i] = {}; });
             }
             rebuildTable();
             updateStatus('Time Remap reset successfully.');
@@ -193,7 +197,8 @@ function moveSelectedKeyframes(offset) {
                     newRow: row + offset,
                     col: col,
                     value: value,
-                    layerName: cell.dataset.layerName
+                    layerName: cell.dataset.layerName,
+                    layerIndex: compInfo.layers[col].index
                 });
             }
         }
@@ -231,7 +236,8 @@ function moveSelectedKeyframes(offset) {
             oldRow: item.oldRow,
             newRow: item.newRow,
             value: item.value,
-            col: item.col
+            col: item.col,
+            layerIndex: item.layerIndex
         });
     });
 
@@ -242,8 +248,8 @@ function moveSelectedKeyframes(offset) {
         if (oldCell) {
             var input = oldCell.querySelector('input');
             input.value = '';
-            delete currentData[item.layerName][item.oldRow];
-            deleteKeyframe(item.layerName, item.oldRow - 1);
+            delete currentData[item.col][item.oldRow];
+            deleteKeyframe(item.layerIndex, item.layerName, item.oldRow - 1);
         }
     });
     suppressBlurApply = false; // Reset after clearing old positions
@@ -255,8 +261,8 @@ function moveSelectedKeyframes(offset) {
         if (newCell) {
             var input = newCell.querySelector('input');
             input.value = item.value;
-            currentData[item.layerName][item.newRow] = item.value;
-            addKeyframe(item.layerName, item.newRow - 1, item.value);
+            currentData[item.col][item.newRow] = item.value;
+            addKeyframe(item.layerIndex, item.layerName, item.newRow - 1, item.value);
             selectCell(newCell);
         }
     });
@@ -283,19 +289,20 @@ function moveSingleCell(input, offset) {
 
     var cell = input.parentElement;
     var layerName = cell.dataset.layerName;
+    var layerIndex = compInfo.layers[col].index;
 
     // Clear old position
     input.value = '';
-    delete currentData[layerName][row];
-    deleteKeyframe(layerName, row - 1);
+    delete currentData[col][row];
+    deleteKeyframe(layerIndex, layerName, row - 1);
 
     // Set new position
     var newCell = document.querySelector('[data-row="' + newRow + '"][data-col="' + col + '"]');
     if (newCell) {
         var newInput = newCell.querySelector('input');
         newInput.value = value;
-        currentData[layerName][newRow] = value;
-        addKeyframe(layerName, newRow - 1, value);
+        currentData[col][newRow] = value;
+        addKeyframe(layerIndex, layerName, newRow - 1, value);
 
         // Focus and select new cell
         clearSelection();
@@ -313,19 +320,20 @@ function decreaseKeyframeValue(input, row, col) {
     var currentValue = parseInt(input.value) || 0;
     var cell = input.parentElement;
     var layerName = cell.dataset.layerName;
+    var layerIndex = compInfo.layers[col].index;
 
     if (currentValue <= 1) {
         // Delete keyframe
         input.value = '';
-        delete currentData[layerName][row];
-        deleteKeyframe(layerName, row - 1);
+        delete currentData[col][row];
+        deleteKeyframe(layerIndex, layerName, row - 1);
         updateStatus('Deleted');
     } else {
         // Decrease value
         var newValue = currentValue - 1;
         input.value = newValue;
-        currentData[layerName][row] = newValue;
-        addKeyframe(layerName, row - 1, newValue);
+        currentData[col][row] = newValue;
+        addKeyframe(layerIndex, layerName, row - 1, newValue);
         updateStatus('→ ' + newValue);
     }
 }
@@ -335,11 +343,12 @@ function increaseKeyframeValue(input, row, col) {
     var currentValue = parseInt(input.value) || 0;
     var cell = input.parentElement;
     var layerName = cell.dataset.layerName;
+    var layerIndex = compInfo.layers[col].index;
     var newValue = currentValue + 1;
 
     input.value = newValue;
-    currentData[layerName][row] = newValue;
-    addKeyframe(layerName, row - 1, newValue);
+    currentData[col][row] = newValue;
+    addKeyframe(layerIndex, layerName, row - 1, newValue);
     updateStatus('→ ' + newValue);
 }
 

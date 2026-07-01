@@ -8,6 +8,10 @@ function setupEventListeners() {
     document.getElementById('removeAllBtn').addEventListener('click', removeAllKeyframes);
     document.getElementById('exportBtn').addEventListener('click', exportData);
     document.getElementById('importBtn').addEventListener('click', importData);
+    var importCamBtn = document.getElementById('importCamXdtsBtn');
+    if (importCamBtn) importCamBtn.addEventListener('click', importCameraFromXdts);
+    var newCompBtn = document.getElementById('newCompFromSelBtn');
+    if (newCompBtn) newCompBtn.addEventListener('click', newCompFromSelection);
     document.getElementById('frameInterval').addEventListener('change', rebuildTable);
     document.getElementById('keyframeType').addEventListener('change', function () {
         updateStatus('Type: ' + this.value);
@@ -182,10 +186,10 @@ function setupEventListeners() {
                         }
                     } else {
                         // Ensure AE state cleared even if DOM cell isn't found
-                        if (currentData[item.layerName]) {
-                            delete currentData[item.layerName][r];
+                        if (currentData[item.col]) {
+                            delete currentData[item.col][r];
                         }
-                        deleteKeyframe(item.layerName, r - 1);
+                        deleteKeyframe(compInfo.layers[item.col].index, item.layerName, r - 1);
                     }
                 });
 
@@ -487,4 +491,95 @@ function handleKeyDown(e) {
             }
         }
     }
+}
+
+function importCameraFromXdts() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xdts';
+    input.onchange = function (e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (e2) {
+            try {
+                var raw = e2.target.result;
+                var jsonStart = raw.indexOf('{');
+                if (jsonStart === -1) { updateStatus('Invalid XDTS: no JSON content'); return; }
+                var xdts = JSON.parse(raw.substring(jsonStart));
+                var timeline = xdts.timeTables && xdts.timeTables[0];
+                if (!timeline) { updateStatus('Invalid XDTS: no timeline'); return; }
+
+                var camFieldId = null;
+                var foundLabels = [];
+                (timeline.timeTableHeaders || []).forEach(function (h) {
+                    (h.names || []).forEach(function (n) {
+                        foundLabels.push(h.fieldId + ':' + n);
+                        if (n.toLowerCase().trim() === 'cel') camFieldId = h.fieldId;
+                    });
+                });
+                if (camFieldId === null) { updateStatus('No Cel field. Labels: ' + foundLabels.join(', ')); return; }
+
+                var camField = null;
+                (timeline.fields || []).forEach(function (f) {
+                    if (f.fieldId === camFieldId) camField = f;
+                });
+                if (!camField || !camField.tracks || !camField.tracks[0]) { updateStatus('No camera track data. Field keys: ' + Object.keys(camField || {}).join(',')); return; }
+
+                var track = camField.tracks[0];
+                var frames = track.frames || [];
+                if (!frames.length) {
+                    var fieldSummary = [];
+                    (timeline.fields || []).forEach(function (f) {
+                        var t = f.tracks && f.tracks[0];
+                        var fc = t && t.frames ? t.frames.length : 0;
+                        fieldSummary.push('f' + f.fieldId + '=' + fc + 'frames');
+                    });
+                    updateStatus('Cel/' + camFieldId + ' empty. Fields: ' + fieldSummary.join(', '));
+                    return;
+                }
+                var keyframes = [];
+                var lastFrame = null;
+                frames.forEach(function (fr) {
+                    if (!fr.data || !fr.data[0] || !fr.data[0].values) return;
+                    var v = fr.data[0].values;
+                    if (v[0] === 'SYMBOL_NULL_CELL') return;
+                    lastFrame = { f: fr.frame + 1, x: parseFloat(v[1]), y: parseFloat(v[2]), s: parseFloat(v[3]), r: parseFloat(v[4]) };
+                    if (v[0] === 'PAN') {
+                        keyframes.push({ f: fr.frame + 1, x: parseFloat(v[1]), y: parseFloat(v[2]), s: parseFloat(v[3]), r: parseFloat(v[4]) });
+                    }
+                });
+                if (lastFrame && keyframes.length && (lastFrame.f !== keyframes[keyframes.length - 1].f)) {
+                    keyframes.push(lastFrame);
+                }
+
+                if (!keyframes.length) { updateStatus('No camera keyframes found'); return; }
+
+                var w = parseInt(document.getElementById('camWidth').value) || 1920;
+                var h = parseInt(document.getElementById('camHeight').value) || 1080;
+
+                var scriptCall = 'createCameraSolid(' + w + ',' + h + ',\'' + JSON.stringify(keyframes) + '\')';
+                csInterface.evalScript(scriptCall, function () {
+                    updateStatus('Camera: ' + keyframes.length + 'K imported');
+                });
+            } catch (err) {
+                updateStatus('XDTS parse error: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+function newCompFromSelection() {
+    var w = parseInt(document.getElementById('camWidth').value) || 1920;
+    var h = parseInt(document.getElementById('camHeight').value) || 1080;
+    updateStatus('Creating comp from selection...');
+    csInterface.evalScript('createCompFromSelection(' + w + ',' + h + ')', function (res) {
+        if (res === 'true') {
+            updateStatus('Camera comp created (' + w + 'x' + h + ')');
+        } else {
+            updateStatus('Comp failed: ' + res);
+        }
+    });
 }
