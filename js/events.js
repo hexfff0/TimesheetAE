@@ -569,12 +569,49 @@ function importCameraFromXdts() {
 function newCompFromSelection() {
     var w = parseInt(document.getElementById('camWidth').value) || 1920;
     var h = parseInt(document.getElementById('camHeight').value) || 1080;
-    updateStatus('Creating comp from selection...');
-    csInterface.evalScript('createCompFromSelection(' + w + ',' + h + ')', function (res) {
-        if (res === 'true') {
-            updateStatus('Camera comp created (' + w + 'x' + h + ')');
-        } else {
-            updateStatus('Comp failed: ' + res);
-        }
-    });
+    var modal = document.getElementById('cameraCompModal');
+    modal.classList.add('open');
 }
+
+document.addEventListener('click', function (e) {
+    var btn = e.target.closest('#cameraCompModal [data-mode]');
+    if (!btn) return;
+    var modal = document.getElementById('cameraCompModal');
+    var mode = btn.dataset.mode;
+    modal.classList.remove('open');
+
+    var w = parseInt(document.getElementById('camWidth').value) || 1920;
+    var h = parseInt(document.getElementById('camHeight').value) || 1080;
+
+    if (mode === 'comp') {
+        updateStatus('Creating comp from selection...');
+        csInterface.evalScript('createCompFromSelection(' + w + ',' + h + ')', function (res) {
+            if (res === 'true') {
+                updateStatus('Camera comp created (' + w + 'x' + h + ')');
+            } else {
+                updateStatus('Comp failed: ' + res);
+            }
+        });
+    } else if (mode === 'link') {
+        updateStatus('Adding camera link expressions...');
+        csInterface.evalScript('addCameraLinkExpression(' + w + ',' + h + ')', function (res) {
+            if (res === 'true') {
+                updateStatus('Camera link expressions added');
+            } else {
+                updateStatus('Link failed: ' + res);
+            }
+        });
+    }
+});
+
+// Close modal on overlay click
+document.getElementById('cameraCompModal').addEventListener('click', function (e) {
+    if (e.target === this) {
+        this.classList.remove('open');
+    }
+});
+
+// Close modal on X button click
+document.getElementById('cameraCompClose').addEventListener('click', function () {
+    document.getElementById('cameraCompModal').classList.remove('open');
+});

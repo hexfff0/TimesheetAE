@@ -79,7 +79,7 @@
                     <input type="number" class="cam-input" id="camHeight" value="1080" min="1" max="99999">
                 </div>
                 <button class="btn btn-ghost" id="importCamXdtsBtn">Import Camera</button>
-                <button class="btn btn-ghost" id="newCompFromSelBtn">Camera Comp</button>
+                <button class="btn btn-ghost" id="newCompFromSelBtn">Camera Link</button>
             </div>
         </div>
     </div>
@@ -94,6 +94,27 @@
             <tbody id="tableBody">
             </tbody>
         </table>
+    </div>
+
+    <div class="modal-overlay" id="cameraCompModal">
+        <div class="modal-box">
+            <button class="modal-close" id="cameraCompClose">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                </svg>
+            </button>
+            <div class="modal-label">Camera Link</div>
+            <div class="modal-options">
+                <button class="modal-option" data-mode="comp">
+                    <span class="modal-option-label">Comp</span>
+                    <span class="modal-option-desc">New comp from selection with camera link</span>
+                </button>
+                <button class="modal-option" data-mode="link">
+                    <span class="modal-option-label">Link</span>
+                    <span class="modal-option-desc">Add camera expressions to selected layers</span>
+                </button>
+            </div>
+        </div>
     </div>
 
     <div id="status">Ready</div>

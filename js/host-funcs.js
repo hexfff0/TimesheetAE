@@ -940,4 +940,62 @@ function createCompFromSelection(w, h) {
     return "true";
 }
 
+function addCameraLinkExpression(w, h) {
+    var comp = app.project.activeItem;
+    if (!(comp instanceof CompItem)) return "Error: No active comp";
+    var sel = comp.selectedLayers;
+    if (!sel || sel.length === 0) return "Error: No layer selected";
+    app.beginUndoGroup("Add Camera Link Expression");
+    var scaleExpr = 'transform.scale;\\n' +
+        'for (var i = 1; i < source.numLayers + 1; ++i) {\\n' +
+        'bclr = source.layer(i);\\n' +
+        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
+        'bc = source.layer(i);\\n' +
+        'scl = bc.scale.valueAtTime(time-thisLayer.startTime) * 0.01;\\n' +
+        'while (true){\\n' +
+        'if(!bc.hasParent) break;\\n' +
+        'bc = bc.parent;\\n' +
+        'for (var i=0; i < 2; i++) {scl[i]*=bc.scale.valueAtTime(time-thisLayer.startTime)[i]/100}\\n' +
+        '}\\n' +
+        '[1/scl[0]*transform.scale[0],1/scl[1]*transform.scale[1]]\\n' +
+        'break;}transform.scale;}';
+    var posExpr = 'transform.position;\\n' +
+        'for (var i = 1; i < source.numLayers + 1; ++i) {\\n' +
+        'bclr = source.layer(i);\\n' +
+        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
+        'source.layer(i).transform.anchorPoint.valueAtTime(time-thisLayer.startTime);\\n' +
+        'break;}transform.position;}';
+    var rotExpr = 'transform.rotation;\\n' +
+        'for (var i = 1; i < source.numLayers + 1; ++i) {\\n' +
+        'bclr = source.layer(i);\\n' +
+        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
+        'rt = source.layer(i).toWorldVec([1,0,0],time-thisLayer.startTime); -radiansToDegrees(Math.atan2(rt[1],rt[0]));\\n' +
+        'break;}transform.rotation;}';
+    var anchorExpr = 'transform.anchorPoint;\\n' +
+        'for (var i = 1; i < source.numLayers + 1; ++i) {\\n' +
+        'bclr = source.layer(i);\\n' +
+        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
+        'bc = source.layer(i);\\n' +
+        'bc.toWorld(bc.anchorPoint.valueAtTime(time-thisLayer.startTime));\\n' +
+        'break;}transform.anchorPoint;}';
+    for (var s = 0; s < sel.length; s++) {
+        var layer = sel[s];
+        var t = layer.property("ADBE Transform Group");
+        if (t) {
+            try {
+                var scaleProp = t.property("ADBE Scale");
+                if (scaleProp && scaleProp.canSetExpression) scaleProp.expression = scaleExpr;
+                var posProp = t.property("ADBE Position");
+                if (posProp && posProp.canSetExpression) posProp.expression = posExpr;
+                var rotProp = t.property("ADBE Rotate Z");
+                if (rotProp && rotProp.canSetExpression) rotProp.expression = rotExpr;
+                var anchorProp = t.property("ADBE Anchor Point");
+                if (anchorProp && anchorProp.canSetExpression) anchorProp.expression = anchorExpr;
+            } catch (e) {}
+        }
+    }
+    app.endUndoGroup();
+    return "true";
+}
+
 `;

@@ -38,7 +38,7 @@ Tools for importing and synchronizing camera keyframe.
 | Feature           | Description                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------------------- |
 | **Import Camera** | Import camera keyframe data from `.xdts`.                                                   |
-| **Camera Comp**   | Create a new composition from the selected layers and synchronize camera data automatically. |
+| **Camera Comp**   | Opens a dialog with two modes: **Comp** (new comp from selection with camera link) and **Link** (add camera expressions to selected layers). |
 
 ---
 
@@ -94,5 +94,3 @@ C:\Program Files (x86)\Common Files\Adobe\CEP\extensions
 ## License
 
 This project is licensed under the **MIT License**.
-
----
