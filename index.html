@@ -60,7 +60,7 @@
                 <button class="btn btn-ghost" id="clearBtn">Clear</button>
                 <button class="btn btn-ghost" id="removeAllBtn">Remove All</button>
                 <span class="toolbar-divider"></span>
-                <button class="btn btn-ghost" id="exportBtn">Export</button>
+                <button class="btn btn-ghost" id="previewBtn">Preview</button>
                 <button class="btn btn-ghost" id="importBtn">Import</button>
                 <span class="toolbar-divider"></span>
                 <div class="toggle-wrapper">
@@ -114,6 +114,27 @@
                     <span class="modal-option-desc">Add camera expressions to selected layers</span>
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div class="modal-overlay" id="previewModal">
+        <div class="preview-modal-box">
+            <button class="modal-close" id="previewModalClose">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                </svg>
+            </button>
+            <div class="modal-label">Preview: <span id="previewFileName"></span></div>
+            <div id="previewTableContainer">
+                <table id="previewTable">
+                    <thead>
+                        <tr id="previewHeaderRow"></tr>
+                    </thead>
+                    <tbody id="previewTableBody"></tbody>
+                </table>
+            </div>
+            <div id="previewInfo"></div>
         </div>
     </div>
 

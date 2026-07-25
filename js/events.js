@@ -6,7 +6,7 @@ function setupEventListeners() {
     document.getElementById('syncBtn').addEventListener('click', syncLayers);
     document.getElementById('clearBtn').addEventListener('click', clearSelection);
     document.getElementById('removeAllBtn').addEventListener('click', removeAllKeyframes);
-    document.getElementById('exportBtn').addEventListener('click', exportData);
+    document.getElementById('previewBtn').addEventListener('click', previewData);
     document.getElementById('importBtn').addEventListener('click', importData);
     var importCamBtn = document.getElementById('importCamXdtsBtn');
     if (importCamBtn) importCamBtn.addEventListener('click', importCameraFromXdts);
@@ -17,6 +17,15 @@ function setupEventListeners() {
         updateStatus('Type: ' + this.value);
     });
     document.getElementById('headerMode').addEventListener('change', rebuildTable);
+    document.getElementById('headerRow').addEventListener('click', function (e) {
+        if (e.target.tagName !== 'TH' || e.target === this.firstElementChild) return;
+    });
+    document.getElementById('previewHeaderRow').addEventListener('click', function (e) {
+        if (e.target.tagName !== 'TH' || e.target === this.firstElementChild) return;
+        var colIndex = Array.from(this.children).indexOf(e.target) - 1;
+        if (colIndex < 0) return;
+        addPreviewKeyframes(colIndex);
+    });
 
     // Custom Spinner Logic
     var spinnerUp = document.querySelector('.spinner-up');
@@ -614,4 +623,18 @@ document.getElementById('cameraCompModal').addEventListener('click', function (e
 // Close modal on X button click
 document.getElementById('cameraCompClose').addEventListener('click', function () {
     document.getElementById('cameraCompModal').classList.remove('open');
+});
+
+// Preview modal close on X button
+document.getElementById('previewModalClose').addEventListener('click', function () {
+    document.getElementById('previewModal').classList.remove('open');
+    window.previewImportData = null;
+});
+
+// Preview modal close on overlay click
+document.getElementById('previewModal').addEventListener('click', function (e) {
+    if (e.target === this) {
+        this.classList.remove('open');
+        window.previewImportData = null;
+    }
 });

@@ -25,8 +25,8 @@ Tools for managing frame timing and layer synchronization.
 | **Sync**       | Connect selected After Effects layers with the extension and synchronize editing.                                |
 | **Clear**      | Clear the current selection inside the extension.                                                                |
 | **Remove All** | Remove all generated Time Remap data from connected layers.                                                      |
-| **Export**     | Export Time Remap data to `.csv` or `.json`.                                                                     |
 | **Import**     | Import keyframe data from `.csv` or `.xdts`.                                                                     |
+| **Preview**    | Preview imported `.csv` or `.xdts` data in a modal table. Click column headers to add keyframes to selected AE layers. |
 | **Re-index**   | Automatically convert non-numeric values in `.csv` or `.xdts` into sequential numeric indexes starting from `1`. |
 
 ---
@@ -79,6 +79,14 @@ C:\Program Files (x86)\Common Files\Adobe\CEP\extensions
 4. Edit timing directly in the Timesheet table
 5. The extension will automatically generate and update **Time Remap** data
 
+### Preview Keyframe Data
+
+1. Click **Preview** to open a file picker
+2. Select a `.csv` or `.xdts` file
+3. The data is displayed in a modal table with frame numbers on the left and layer columns on the right
+4. Select one or more layers in After Effects
+5. Click a column header in the preview table to add Time Remap keyframes to the selected layers
+
 ---
 
 ## Supported Formats
@@ -86,7 +94,6 @@ C:\Program Files (x86)\Common Files\Adobe\CEP\extensions
 | Type          | Formats         |
 | ------------- | --------------- |
 | Keyframe Data | `.csv`, `.xdts` |
-| Export        | `.csv`, `.json` |
 | Camera Data   | `.xdts`         |
 
 ---

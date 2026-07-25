@@ -770,48 +770,6 @@ function ConfirmDialog() {
     }
 }
 
-/**
- * UI Dialog Export
- * @return {string} "csv", "json" or "cancel"
- */
-function showExportTypeDialog() {
-    var dlg = new Window("dialog", "Export Options");
-    dlg.orientation = "column";
-    dlg.alignChildren = ["fill", "top"];
-    dlg.spacing = 15;
-    dlg.margins = 20;
-
-    dlg.add("statictext", undefined, "Select export format:");
-
-    var btnGroup = dlg.add("group");
-    btnGroup.orientation = "row";
-    btnGroup.alignment = ["center", "top"];
-    btnGroup.spacing = 10;
-
-    var csvBtn = btnGroup.add("button", undefined, "Export as CSV");
-    var jsonBtn = btnGroup.add("button", undefined, "Export as JSON");
-    var cancelBtn = btnGroup.add("button", undefined, "Cancel");
-
-    var result = "cancel";
-
-    csvBtn.onClick = function () {
-        result = "csv";
-        dlg.close();
-    };
-
-    jsonBtn.onClick = function () {
-        result = "json";
-        dlg.close();
-    };
-
-    cancelBtn.onClick = function () {
-        dlg.close();
-    };
-
-    dlg.show();
-    return result;
-}
-
 function importDougaData(jsonStr) {
     var data;
     try { data = JSON.parse(jsonStr); } catch (e) { return JSON.stringify({ error: 'JSON parse: ' + e.toString() }); }

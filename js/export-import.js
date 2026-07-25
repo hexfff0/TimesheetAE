@@ -2,84 +2,248 @@
  * Timesheet Extension - Export/Import Functions
  */
 
-function exportData() {
-    if (!compInfo) {
-        updateStatus('Error: No data to export. Sync layers first.');
+function previewData() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,.xdts';
+
+    input.onchange = function (e) {
+        var file = e.target.files[0];
+        if (!file) return;
+
+        var reader = new FileReader();
+        reader.onload = function (event) {
+            try {
+                var content = event.target.result;
+                var importObj;
+
+                if (file.name.toLowerCase().endsWith('.csv')) {
+                    importObj = parseCSVToTimesheet_Import(content, file.name);
+                    if (!importObj) {
+                        updateStatus('Invalid CSV format');
+                        return;
+                    }
+                } else if (file.name.toLowerCase().endsWith('.xdts')) {
+                    importObj = parseXdtsToTimesheetImport(content);
+                    if (!importObj) {
+                        updateStatus('Invalid XDTS format');
+                        return;
+                    }
+                } else {
+                    updateStatus('Unsupported file format');
+                    return;
+                }
+
+                importObj.fileName = file.name;
+                window.previewImportData = importObj;
+                buildPreviewTable(importObj);
+                document.getElementById('previewModal').classList.add('open');
+                updateStatus('Preview loaded: ' + file.name);
+
+            } catch (err) {
+                updateStatus('Error: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    input.click();
+}
+
+function buildPreviewTable(data) {
+    var headerRow = document.getElementById('previewHeaderRow');
+    var tableBody = document.getElementById('previewTableBody');
+
+    document.getElementById('previewFileName').textContent = data.fileName || data.compName || '';
+
+    headerRow.innerHTML = '<th>Frame</th>';
+    tableBody.innerHTML = '';
+
+    var numColumns = Object.keys(data.data).length;
+    var layerNames = data.layerNames || [];
+
+    // Find max frame from data
+    var maxFrame = 0;
+    Object.keys(data.data).forEach(function (layerIndex) {
+        Object.keys(data.data[layerIndex]).forEach(function (frame) {
+            var f = parseInt(frame);
+            if (f > maxFrame) maxFrame = f;
+        });
+    });
+    if (maxFrame < (data.duration || 0)) maxFrame = data.duration;
+
+    // Build headers
+    for (var col = 0; col < numColumns; col++) {
+        var th = document.createElement('th');
+        th.textContent = layerNames[col] || String.fromCharCode(65 + col);
+        th.title = layerNames[col] || '';
+        headerRow.appendChild(th);
+    }
+
+    // Build rows
+    for (var frame = 1; frame <= maxFrame; frame++) {
+        var tr = document.createElement('tr');
+
+        var tdFrame = document.createElement('td');
+        tdFrame.classList.add('frame-label');
+        tdFrame.textContent = frame;
+        tr.appendChild(tdFrame);
+
+        for (var col = 0; col < numColumns; col++) {
+            var td = document.createElement('td');
+            td.classList.add('data-cell');
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.readOnly = true;
+            var layerData = data.data[String(col)];
+            if (layerData && layerData[String(frame)] !== undefined) {
+                input.value = layerData[String(frame)];
+            }
+            td.appendChild(input);
+            tr.appendChild(td);
+        }
+
+        tableBody.appendChild(tr);
+    }
+
+    document.getElementById('previewInfo').textContent = 'Frames: ' + maxFrame + ' | Columns: ' + numColumns;
+}
+
+function addPreviewKeyframes(colIndex) {
+    var data = window.previewImportData;
+    if (!data || !data.data) {
+        updateStatus('Error: No preview data');
         return;
     }
 
-    csInterface.evalScript('showExportTypeDialog()', function (result) {
-        if (result === "csv" || result === "json") {
-            executeExport(result);
-        } else {
-            updateStatus('Export Cancelled');
+    var layerData = data.data[String(colIndex)];
+    if (!layerData) {
+        updateStatus('Error: No data for column');
+        return;
+    }
+
+    var fps = data.fps || 24;
+    var keyframeType = data.keyframeType || 'hold';
+    var passNum = window.previewPassNumber || 1;
+
+    var keyframes = [];
+    var frames = Object.keys(layerData).map(function (f) { return parseInt(f); }).sort(function (a, b) { return a - b; });
+
+    frames.forEach(function (frame) {
+        var value = parseFloat(layerData[String(frame)]);
+        if (!isNaN(value)) {
+            keyframes.push({ frame: frame, value: value });
         }
     });
-}
 
-function executeExport(type) {
-    var extension = type;
-    var defaultName = compInfo.compName + "_timesheet." + extension;
-    var result = window.cep.fs.showSaveDialogEx("Save " + type.toUpperCase(), "", [extension], defaultName);
+    if (keyframes.length === 0) {
+        updateStatus('Error: No keyframes to add');
+        return;
+    }
 
-    if (result.err === 0 && result.data) {
-        var filePath = result.data;
-        var fps = compInfo.fps;
-        var totalFrames = Math.ceil(compInfo.duration);
-        var finalContent = "";
+    var firstFrame = keyframes[0].frame;
 
-        if (type === 'csv') {
-            // --- LOGIC CSV ---
-            var rows = [];
-            rows.push('"Frame","","",""'); // Header 1
-            var header2 = ['""'];
-            compInfo.layers.forEach(function (l) { header2.push('"' + l.name + '"'); });
-            rows.push(header2.join(','));
+    updateStatus('Getting selected layers...');
 
-            for (var f = 1; f <= totalFrames; f++) {
-                var row = ['"' + f + '"'];
-                compInfo.layers.forEach(function (layer, i) {
-                    var layerData = currentData[i] || {};
-                    var val = "";
-                    if (layerData[f] !== undefined) val = layerData[f];
-                    else if (f === Math.round(layer.outPoint * fps) + 1) val = "�";
-                    row.push('"' + val + '"');
-                });
-                rows.push(row.join(','));
+    csInterface.evalScript('getSelectedLayersInfo()', function (result) {
+        try {
+            var info = JSON.parse(result);
+            if (info.error) {
+                updateStatus('Error: ' + info.error);
+                return;
             }
-            finalContent = rows.join('\r\n');
-        } else {
-            // --- LOGIC JSON ---
-            var indexedData = {};
-            compInfo.layers.forEach(function (layer, index) {
-                var layerData = currentData[index] || {};
-                var processed = {};
 
-                // Store keyframe data
-                Object.keys(layerData).forEach(function (k) { processed[k] = layerData[k]; });
+            var layers = info.layers;
+            if (!layers || layers.length === 0) {
+                updateStatus('Error: No layers selected');
+                return;
+            }
 
-                // Add end marker �
-                var marker = Math.round(layer.outPoint * fps) + 1;
-                if (processed[marker] === undefined) processed[marker] = "�";
+            var layersCleared = 0;
 
-                // Use index as key for ordering A, B, C (0, 1, 2)
-                indexedData[index] = processed;
+            layers.forEach(function (layer) {
+                csInterface.evalScript('clearAllTimeRemapKeyframes(' + layer.index + ',"' + layer.name + '")', function () {
+                    layersCleared++;
+                    if (layersCleared === layers.length) {
+                        addAllKeyframes();
+                    }
+                });
             });
 
-            finalContent = JSON.stringify({
-                version: '1.2',
-                compName: compInfo.compName,
-                fps: fps,
-                duration: compInfo.duration,
-                data: indexedData
-            }, null, 2);
-        }
+            function addAllKeyframes() {
+                var totalToAdd = layers.length * keyframes.length;
+                var keyframesAdded = 0;
 
-        var fs = require('fs');
-        fs.writeFile(filePath, finalContent, 'utf8', function (err) {
-            if (!err) updateStatus('Exported: ' + type.toUpperCase());
-        });
-    }
+                layers.forEach(function (layer) {
+                    keyframes.forEach(function (kf) {
+                        var scriptCall = 'addTimeRemapKeyframe_Import(' + layer.index + ',"' + layer.name + '", ' + kf.frame + ', ' + kf.value + ', "' + keyframeType + '", ' + fps + ')';
+                        csInterface.evalScript(scriptCall, function () {
+                            keyframesAdded++;
+                            if (keyframesAdded === totalToAdd) {
+                                cleanupFirstKeyframes();
+                            }
+                        });
+                    });
+                });
+            }
+
+            function cleanupFirstKeyframes() {
+                var layersCleaned = 0;
+                layers.forEach(function (layer) {
+                    csInterface.evalScript(
+                        'removeFirstKeyframeIfNeeded(' + layer.index + ',"' + layer.name + '", ' + firstFrame + ', ' + fps + ')',
+                        function () {
+                            layersCleaned++;
+                            if (layersCleaned === layers.length) {
+                                trimLayerDurations();
+                            }
+                        }
+                    );
+                });
+            }
+
+            function trimLayerDurations() {
+                var endMarkers = data.endMarkers || {};
+                var hasEndMarkers = Object.keys(endMarkers).length > 0;
+                var layersTrimmed = 0;
+
+                if (!hasEndMarkers) {
+                    onAllComplete();
+                    return;
+                }
+
+                layers.forEach(function (layer) {
+                    var endFrame = endMarkers[String(colIndex)] || 0;
+                    var maxFrame = data.duration || 0;
+                    csInterface.evalScript(
+                        'trimLayerDuration(' + layer.index + ',"' + layer.name + '", ' + endFrame + ', ' + maxFrame + ', ' + fps + ')',
+                        function () {
+                            layersTrimmed++;
+                            if (layersTrimmed === layers.length) {
+                                onAllComplete();
+                            }
+                        }
+                    );
+                });
+            }
+
+            function onAllComplete() {
+                if (passNum === 1) {
+                    window.previewPassNumber = 2;
+                    updateStatus('Pass 1 complete, applying pass 2...');
+                    setTimeout(function () {
+                        addPreviewKeyframes(colIndex);
+                    }, 500);
+                } else {
+                    window.previewPassNumber = null;
+                    updateStatus('Added ' + keyframes.length + ' keyframes to ' + layers.length + ' layers (2 passes completed)');
+                }
+            }
+
+        } catch (e) {
+            updateStatus('Error: ' + e.message);
+        }
+    });
 }
 
 function parseCSVLine_Import(line) {
@@ -183,8 +347,8 @@ function parseCSVToTimesheet_Import(csvContent, filename) {
 
         function isEndMarker(value) {
             if (!value) return false;
-            return value.indexOf('�') !== -1 ||
-                value.indexOf('�') !== -1 ||
+            return value.indexOf('\ufffd') !== -1 ||
+                value.indexOf('\uFFFD') !== -1 ||
                 value.indexOf('\xd7') !== -1 ||
                 value.indexOf('\ufffd') !== -1;
         }
@@ -342,40 +506,6 @@ function applyAllKeyframes_Import() {
     }
 }
 
-// Parse JSON and extract � markers into endMarkers
-function parseJSONWithMarkers(importObj) {
-    var cleanData = {};
-    var endMarkers = importObj.endMarkers || {};
-
-    // Process each layer's data
-    Object.keys(importObj.data).forEach(function (layerIndex) {
-        var layerData = importObj.data[layerIndex];
-        cleanData[layerIndex] = {};
-
-        Object.keys(layerData).forEach(function (frame) {
-            var value = layerData[frame];
-            var valueStr = String(value); // Convert to string for checking
-
-            // Check if this is an end marker
-            if (valueStr === "�" || valueStr === "�" || valueStr.indexOf('�') !== -1 || valueStr.indexOf('�') !== -1) {
-                // Store as end marker for this layer
-                endMarkers[String(layerIndex)] = parseInt(frame);
-            } else {
-                // Store as regular keyframe
-                cleanData[layerIndex][frame] = value;
-            }
-        });
-    });
-
-    return {
-        data: cleanData,
-        endMarkers: endMarkers,
-        duration: importObj.duration,
-        frameInterval: importObj.frameInterval,
-        keyframeType: importObj.keyframeType
-    };
-}
-
 function parseXdtsToTimesheetImport(content) {
     try {
         var jsonStart = content.indexOf('{');
@@ -433,6 +563,35 @@ function parseXdtsToTimesheetImport(content) {
     } catch (e) { return null; }
 }
 
+function parseJSONWithMarkers(importObj) {
+    var cleanData = {};
+    var endMarkers = importObj.endMarkers || {};
+
+    Object.keys(importObj.data).forEach(function (layerIndex) {
+        var layerData = importObj.data[layerIndex];
+        cleanData[layerIndex] = {};
+
+        Object.keys(layerData).forEach(function (frame) {
+            var value = layerData[frame];
+            var valueStr = String(value);
+
+            if (valueStr === "\ufffd" || valueStr === "\uFFFD" || valueStr.indexOf('\ufffd') !== -1 || valueStr.indexOf('\uFFFD') !== -1) {
+                endMarkers[String(layerIndex)] = parseInt(frame);
+            } else {
+                cleanData[layerIndex][frame] = value;
+            }
+        });
+    });
+
+    return {
+        data: cleanData,
+        endMarkers: endMarkers,
+        duration: importObj.duration,
+        frameInterval: importObj.frameInterval,
+        keyframeType: importObj.keyframeType
+    };
+}
+
 function importData() {
     var input = document.createElement('input');
     input.type = 'file';
@@ -468,7 +627,7 @@ function importData() {
                         updateStatus('Invalid JSON format');
                         return;
                     }
-                    // Parse JSON and extract � markers
+                    // Parse JSON and extract end markers
                     importObj = parseJSONWithMarkers(rawJSON);
                 }
 
