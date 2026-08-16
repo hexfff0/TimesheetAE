@@ -488,15 +488,40 @@ tbody tr.second-border {
 
 /* Status Bar */
 #status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     background: var(--panel-bg);
     padding: 6px 12px;
     border-top: 1px solid var(--border-color);
     font-size: 11px;
     color: var(--text-secondary);
     flex-shrink: 0;
+}
+
+/* Status message ellipsizes without hiding the version label. */
+#statusText {
+    flex: 1 1 auto;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Clickable version label pinned to the bottom-right of the status bar. */
+#versionLabel {
+    flex-shrink: 0;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    user-select: none;
+    transition: color 0.15s;
+}
+
+#versionLabel:hover {
+    color: var(--accent-color);
+    text-decoration: underline;
 }
 
 /* Soft update banner (non-blocking, self-updater) */

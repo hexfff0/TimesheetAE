@@ -55,14 +55,6 @@ function setupEventListeners() {
 
     // Camera import + Camera Link modal (live in camera.js)
     setupCameraHandlers();
-
-    // Manual update check - bypasses the periodic cooldown.
-    var checkUpdateBtn = document.getElementById('checkUpdateBtn');
-    if (checkUpdateBtn) {
-        checkUpdateBtn.addEventListener('click', function () {
-            checkForUpdates(true);
-        });
-    }
 }
 
 // Shift+Arrow extension when the focused input is a cell: blur first so the

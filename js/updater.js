@@ -1,9 +1,10 @@
 /**
  * Timesheet Extension - Self Updater
  *
- * Fetches version.json from the public GitHub repo on panel load (silently),
- * shows a soft non-blocking banner when a newer version exists, and applies
- * the update: the panel downloads each file, base64-encodes it, and hands it
+ * Checks the public GitHub repo for a newer version on every panel open
+ * (silently, no cooldown), shows a soft non-blocking banner when one exists,
+ * and applies the update: the panel downloads each file, base64-encodes it,
+ * and hands it
  * to the host `writeUpdaterFile`, which decodes and stages it byte-exact into
  * a temp folder (only the files listed in version.json are touched). Once all
  * files are staged, `applyStagedUpdate` swaps them into the install folder
@@ -24,20 +25,14 @@ var UPDATE_BRANCH = 'main';
 var UPDATE_VERSION_URL = 'https://raw.githubusercontent.com/' + UPDATE_REPO_OWNER + '/' + UPDATE_REPO_NAME + '/' + UPDATE_BRANCH + '/version.json';
 var UPDATE_FILE_BASE = 'https://raw.githubusercontent.com/' + UPDATE_REPO_OWNER + '/' + UPDATE_REPO_NAME + '/' + UPDATE_BRANCH + '/';
 
-// Cooldown so the silent auto-check only hits the network once per session.
-var UPDATE_LAST_CHECK_KEY = 'timesheet.updateLastCheck';
-var UPDATE_COOLDOWN_MS = 12 * 60 * 60 * 1000; // 12h
 
 // The version this build was shipped as (matches CSXS/manifest.xml). Update
 // this on every release; it is the fallback when the install has no
 // version.json yet (e.g. a pre-updater install).
-var UPDATE_CURRENT_VERSION = '3.3.0';
+var UPDATE_CURRENT_VERSION = '3.4.0';
 
 var UPDATE_STATE = {
-    checked: false,
-    available: null,   // parsed remote version.json when newer
-    downloading: false,
-    applied: false
+    available: null    // parsed remote version.json when newer
 };
 
 /**
@@ -93,20 +88,11 @@ function readLocalUpdaterVersion(callback) {
 }
 
 /**
- * Check for a newer version. Silent and non-blocking: called from initUpdater
- * on a timer (force=false) so it never delays panel setup. When force=true
- * (manual "Check Update" button) the cooldown is skipped and the outcome is
- * reported to the status bar.
+ * Check for a newer version. Called on every panel open from initUpdater
+ * (force=false, silent — never delays setup). When force=true (clicking the
+ * bottom-right version label) the outcome is reported to the status bar.
  */
 function checkForUpdates(force) {
-    // Cooldown: don't hammer GitHub on every panel open. Manual checks bypass it.
-    var last = 0;
-    try { last = parseInt(localStorage.getItem(UPDATE_LAST_CHECK_KEY)) || 0; } catch (e) {}
-    if (!force && Date.now() - last < UPDATE_COOLDOWN_MS) {
-        UPDATE_STATE.checked = true;
-        return;
-    }
-
     if (force) updateStatus('Checking for updates...');
 
     readLocalUpdaterVersion(function (localVersion) {
@@ -116,9 +102,6 @@ function checkForUpdates(force) {
                 return res.json();
             })
             .then(function (remote) {
-                UPDATE_STATE.checked = true;
-                try { localStorage.setItem(UPDATE_LAST_CHECK_KEY, String(Date.now())); } catch (e) {}
-
                 if (!remote || !remote.version) {
                     if (force) updateStatus('Update check: no version feed.');
                     return;
@@ -134,7 +117,6 @@ function checkForUpdates(force) {
             .catch(function (err) {
                 // Network/JSON failures are silent on load, but a manual check
                 // should say why nothing happened.
-                UPDATE_STATE.checked = true;
                 if (force) updateStatus('Update check failed: ' + (err && err.message ? err.message : err));
             });
     });
@@ -217,7 +199,6 @@ function applyUpdate() {
         var btn = banner.querySelector('#updateActionBtn');
         if (btn) { btn.disabled = true; btn.textContent = 'Updating...'; }
     }
-    UPDATE_STATE.downloading = true;
 
     var index = 0;
     var files = remote.files;
@@ -244,7 +225,6 @@ function applyUpdate() {
 
     // Report an error and re-enable the Update button.
     function fail(message) {
-        UPDATE_STATE.downloading = false;
         setBannerText('Update failed: ' + message);
         if (banner) {
             var b = banner.querySelector('#updateActionBtn');
@@ -259,15 +239,11 @@ function applyUpdate() {
             // applyStagedUpdate for any file that stays locked.
             syncInstalledVersion(function (ok) {
                 if (!ok) {
-                    UPDATE_STATE.downloading = false;
                     fail('could not stage version.json');
                     return;
                 }
                 evalHost('applyStagedUpdate', [root], function (applyResult) {
-                    UPDATE_STATE.downloading = false;
-
                     if (applyResult === 'applied') {
-                        UPDATE_STATE.applied = true;
                         setBannerText('Update applied (v' + (remote.version || '') + '). Reloading...');
                         updateStatus('Update applied. Reloading panel...');
                         // Best-effort cleanup of staging + the Startup fallback
@@ -354,9 +330,27 @@ function utf8ToBase64(str) {
 
 /**
  * Kick off the silent check from the panel entry point (main.js). Deferred so
- * it never blocks the initial table build.
+ * it never blocks the initial table build. Checks on every panel open (no
+ * cooldown). Also fills the bottom-right version label with the installed
+ * version and makes it clickable to re-check with visible status feedback.
  */
 function initUpdater() {
+    var label = document.getElementById('versionLabel');
+    if (label) {
+        // Show the installed version (read by the host from the on-disk
+        // version.json; falls back to the baked-in current version).
+        readLocalUpdaterVersion(function (version) {
+            label.textContent = 'v' + version;
+        });
+        if (typeof fetch === 'function') {
+            label.title = 'Check for updates';
+            label.addEventListener('click', function () {
+                checkForUpdates(true);
+            });
+        } else {
+            label.title = '';
+        }
+    }
     if (typeof fetch !== 'function') return; // very old CEF - skip gracefully
     setTimeout(checkForUpdates, 0);
 }

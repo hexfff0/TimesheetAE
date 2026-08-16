@@ -235,7 +235,11 @@ function rebuildTable() {
 }
 
 function updateStatus(message) {
-    document.getElementById('status').textContent = message;
+    // #status is now a flex row holding the message span and the bottom-right
+    // version label; writing to the whole container would erase the label.
+    // Fall back to #status for any cached HTML without the span.
+    var textEl = document.getElementById('statusText') || document.getElementById('status');
+    if (textEl) textEl.textContent = message;
 }
 
 function clearDropPreview() {
