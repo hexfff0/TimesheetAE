@@ -753,19 +753,25 @@ function base64Decode(base64) {
 }
 
 /**
- * Return the installed extension root folder (parent of host/).
+ * The panel resolves its own install root once via CEP getSystemPath and
+ * passes it to every updater function. The host can never derive it itself:
+ * every call runs as a string through evalScript (HOST_FUNCS + ';' + script),
+ * where $.fileName is empty and File($.fileName) is a broken path.
  */
-function updaterRoot() {
-    return File($.fileName).parent.parent;
+function trimRoot(installRoot) {
+    var s = String(installRoot);
+    if (s.charAt(s.length - 1) === "/") s = s.substring(0, s.length - 1);
+    return s;
 }
 
 /**
  * Read the installed copy's version.json (the local version the updater
  * compares against). Returns its raw text, or "null" when it is absent.
  */
-function readUpdaterVersion() {
+function readUpdaterVersion(installRoot) {
+    installRoot = trimRoot(installRoot);
     try {
-        var localFile = new File(updaterRoot().fsName + "/version.json");
+        var localFile = new File(installRoot + "/version.json");
         if (!localFile.exists) return "null";
         localFile.encoding = "UTF-8";
         localFile.open("r");
@@ -794,48 +800,274 @@ function ensureFolder(folder) {
 }
 
 /**
- * Write an update payload (base64) to <installRoot>/filePath, creating parent
- * folders as needed. filePath must be extension-relative; ".." traversal is
- * rejected. Encoding BINARY + a pre-decoded byte string preserves bytes
- * exactly (no CRLF translation).
+ * Root of the staging dir where update payloads are written before being
+ * swapped into place.
  */
-function writeUpdaterFile(filePath, base64) {
+function stageRoot(installRoot) {
+    return trimRoot(installRoot) + "/.timesheet-update/staging/";
+}
+
+/**
+ * Write an update payload (base64) to the staging dir. The running panel's own
+ * HTML/JS files are memory-mapped by CEF and cannot be overwritten in place
+ * (ExtendScript File.open fails, even "e"), so files are always staged first
+ * and swapped in place by applyStagedUpdate (with a Startup-script fallback).
+ * filePath must be extension-relative; ".." traversal is rejected. Encoding
+ * BINARY + a pre-decoded byte string preserves bytes exactly (no CRLF
+ * translation).
+ */
+function writeUpdaterFile(installRoot, filePath, base64) {
     try {
         if (!filePath || filePath.indexOf("..") !== -1 || filePath.indexOf("/") === 0) {
             return "Error: Invalid update path - " + filePath;
         }
-        // The panel always sends forward-slash paths, so no normalization is
-        // needed. Avoid backslash escape sequences here: the host bundle embeds
-        // this script in a JS template literal that would decode them.
-        var target = new File(updaterRoot().fsName + "/" + filePath);
+        var target = new File(stageRoot(installRoot) + filePath);
         if (!ensureFolder(target.parent)) {
             return "Error: Cannot create folder - " + filePath;
         }
         var data = base64Decode(base64);
         target.encoding = "BINARY";
-        // Try "e" (edit, no-truncate) first: writing the running panel's own
-        // HTML via truncating "w" fails with a sharing violation because CEF
-        // keeps the file memory-mapped. In-place "e" + length setter avoids
-        // that. Fall back to "w" for older hosts where "e" is unavailable.
-        var opened = false;
-        if (target.open("e")) {
-            target.seek(0);
-            target.write(data);
-            target.length = data.length;
-            opened = true;
-        } else if (target.open("w")) {
-            target.write(data);
-            opened = true;
+        if (!target.open("w")) {
+            return "Error: Cannot open for write - " + filePath +
+                " (error: " + target.error + ")";
         }
-        if (opened) {
-            target.close();
-            return "true";
+        target.write(data);
+        target.close();
+        return "staged";
+    } catch (e) {
+        return "Error: " + e.toString();
+    }
+}
+
+/**
+ * Manifest of staged files (one extension-relative path per line). Written by
+ * finishStagedUpdate; consumed by the standalone Startup swap script.
+ */
+function updateManifestFile(installRoot) {
+    return trimRoot(installRoot) + "/.timesheet-update/manifest.txt";
+}
+
+/**
+ * List staged files under <stageRoot> by walking the folder tree. Returns an
+ * array of extension-relative paths (forward slashes).
+ */
+function listStagedFiles(installRoot) {
+    var result = [];
+    var root = new Folder(stageRoot(installRoot));
+    var walk = function (folder, prefix) {
+        var entries = folder.getFiles();
+        for (var i = 0; i < entries.length; i++) {
+            var e = entries[i];
+            var rel = prefix + e.name;
+            if (e instanceof Folder) {
+                walk(e, rel + "/");
+            } else {
+                result[result.length] = rel;
+            }
         }
-        return "Error: Cannot open for write - " + filePath +
-            " (error: " + target.error + ")";
+    };
+    if (root.exists) walk(root, "");
+    return result;
+}
+
+/**
+ * Write the manifest file for the current staged set. Returns "true"/Error.
+ */
+function writeUpdateManifest(installRoot) {
+    try {
+        var files = listStagedFiles(installRoot);
+        var mf = new File(updateManifestFile(installRoot));
+        if (!ensureFolder(mf.parent)) {
+            return "Error: Cannot create manifest folder";
+        }
+        mf.encoding = "UTF-8";
+        if (!mf.open("w")) {
+            return "Error: Cannot open manifest - " + mf.error;
+        }
+        for (var i = 0; i < files.length; i++) {
+            mf.writeln(files[i]);
+        }
+        mf.close();
+        return "true";
+    } catch (e) {
+        return "Error: " + e.toString();
+    }
+}
+
+/**
+ * Emit the standalone Startup swap script into AE's Scripts/Startup folder.
+ * It is the FALLBACK for applyStagedUpdate: it runs at AE launch, BEFORE any
+ * CEP panel loads, so no panel file is memory-mapped and every delete+rename
+ * succeeds. It is only used when the in-process swap could not move some
+ * files; after a full success cleanupStagedUpdate deletes it. The script is
+ * fully self-contained (no host deps): it reads the staged manifest, then for
+ * each file deletes the installed copy and renames the staged file into place.
+ *
+ * installRoot must be inlined because the script runs standalone.
+ */
+function emitStartupSwap(installRoot, startupFolder) {
+    var script = [
+        "// Timesheet self-updater: swap staged update into place at AE launch.",
+        "// Generated by the panel; safe to delete. Runs before CEP loads.",
+        "var __installRoot = " + JSON.stringify(installRoot) + ";",
+        "var __manifest = __installRoot + '/.timesheet-update/manifest.txt';",
+        "var __staging = __installRoot + '/.timesheet-update/staging/';",
+        "function __mkdirs(folder) {",
+        "  if (folder.exists) return true;",
+        "  var parent = folder.parent;",
+        "  if (parent === null) return false;",
+        "  if (!__mkdirs(parent)) return false;",
+        "  return folder.create();",
+        "}",
+        "function __readLines(file) {",
+        "  file.open('r');",
+        "  var lines = [];",
+        "  while (!file.eof) lines[lines.length] = file.readln();",
+        "  file.close();",
+        "  return lines;",
+        "}",
+        "function __removeTree(folder) {",
+        "  if (!folder.exists) return;",
+        "  var entries = folder.getFiles();",
+        "  for (var j = 0; j < entries.length; j++) {",
+        "    var x = entries[j];",
+        "    if (x instanceof Folder) __removeTree(x);",
+        "    else x.remove();",
+        "  }",
+        "  folder.remove();",
+        "}",
+        "try {",
+        "  var mf = new File(__manifest);",
+        "  if (!mf.exists) { /* nothing staged */ }",
+        "  else {",
+        "    var paths = __readLines(mf);",
+        "    for (var i = 0; i < paths.length; i++) {",
+        "      var rel = paths[i];",
+        "      if (!rel) continue;",
+        "      var staged = new File(__staging + rel);",
+        "      if (!staged.exists) continue;",
+        "      var target = new File(__installRoot + '/' + rel);",
+        "      if (!__mkdirs(target.parent)) continue;",
+        "      if (target.exists) target.remove();",
+        "      staged.rename(target.fullName);",
+        "    }",
+        "    mf.remove();",
+        "  }",
+        "  __removeTree(new Folder(__installRoot + '/.timesheet-update'));",
+        "} catch (__e) { } // never fail AE startup for an update"
+    ].join(String.fromCharCode(10));
+
+    var out = new File(startupFolder + "/TimesheetRestartUpdate.jsx");
+    out.encoding = "UTF-8";
+    if (!out.open("w")) {
+        return "Error: Cannot write startup script - " + out.error;
+    }
+    out.write(script);
+    out.close();
+    return "true";
+}
+
+/**
+ * Stage the version.json text (so the swap moves the new version.json too),
+ * write the manifest, and emit the Startup swap script. Called by the panel
+ * after all files are staged. Returns "true" or an Error string.
+ */
+function finishStagedUpdate(installRoot) {
+    installRoot = trimRoot(installRoot);
+    try {
+        // The panel stages version.json itself; the manifest then captures it.
+        var manifestRes = writeUpdateManifest(installRoot);
+        if (manifestRes !== "true") return manifestRes;
+        // AE startup folder uses the app version as the subfolder name.
+        // Folder.appData is a Folder OBJECT in ExtendScript (not a string);
+        // .fsName is required before concatenating a path.
+        var startup = Folder.appData.fsName + "/Adobe/After Effects/" + app.version + "/Scripts/Startup";
+        if (!ensureFolder(new Folder(startup))) {
+            return "Error: Cannot create startup folder - " + startup;
+        }
+        return emitStartupSwap(installRoot, startup);
+    } catch (e) {
+        return "Error: " + e.toString();
+    }
+}
+
+/**
+ * Delete a folder tree recursively (Folder.remove() only works when empty).
+ * ES3-safe; never throws.
+ */
+function removeTree(folder) {
+    try {
+        if (!folder.exists) return;
+        var entries = folder.getFiles();
+        for (var i = 0; i < entries.length; i++) {
+            var e = entries[i];
+            if (e instanceof Folder) {
+                removeTree(e);
+            } else {
+                e.remove();
+            }
+        }
+        folder.remove();
+    } catch (e) { }
+}
+
+/**
+ * Swap the staged update into the install folder, in-process, right after the
+ * panel finishes downloading. delete + rename (never open("w")) because a
+ * running panel's files are memory-mapped by CEF; on Windows delete access is
+ * shared so the swap usually beats the lock. The Startup swap script emitted
+ * by finishStagedUpdate is left in place as a fallback for any file that stays
+ * locked, so the update completes at the next AE launch either way.
+ *
+ * Returns "applied" when every staged file moved, "partial:<n>" when some
+ * failed (n = number that failed), or an Error string.
+ */
+function applyStagedUpdate(installRoot) {
+    installRoot = trimRoot(installRoot);
+    try {
+        var finish = finishStagedUpdate(installRoot);
+        if (typeof finish === "string" && finish.indexOf("Error:") === 0) {
+            return finish; // fallback script not written; do not swap blind
+        }
+        var staged = listStagedFiles(installRoot);
+        var missed = 0;
+        for (var i = 0; i < staged.length; i++) {
+            var rel = staged[i];
+            var src = new File(stageRoot(installRoot) + rel);
+            var dst = new File(installRoot + "/" + rel);
+            if (!ensureFolder(dst.parent)) { missed++; continue; }
+            if (dst.exists) {
+                if (!dst.remove()) { missed++; continue; }
+            }
+            if (!src.rename(dst.fullName)) { missed++; continue; }
+        }
+        if (missed === 0) return "applied";
+        return "partial:" + missed;
+    } catch (e) {
+        return "Error: " + e.toString();
+    }
+}
+
+/**
+ * Remove all artifacts of a completed update: manifest, staging tree,
+ * .timesheet-update/, and the emitted Startup swap script. Call only after
+ * applyStagedUpdate reported "applied" (or once enough for a redownload).
+ * Returns "true".
+ */
+function cleanupStagedUpdate(installRoot) {
+    installRoot = trimRoot(installRoot);
+    try {
+        var mf = new File(updateManifestFile(installRoot));
+        if (mf.exists) mf.remove();
+        removeTree(new Folder(stageRoot(installRoot)));
+        removeTree(new Folder(installRoot + "/.timesheet-update"));
+        var startup = Folder.appData.fsName + "/Adobe/After Effects/" + app.version + "/Scripts/Startup";
+        var sto = new File(startup + "/TimesheetRestartUpdate.jsx");
+        if (sto.exists) sto.remove();
+        return "true";
     } catch (e) {
         return "Error: " + e.toString();
     }
 }`;
 
-// HOST_BUNDLE_SHA256=e7ae8a8c61ba9215da7fd1698d753f97383fc79ca9cac46da21dc7c69e3aea10
+// HOST_BUNDLE_SHA256=f2e79d4d3cdd92a5dc9e69c02c4abb3cb6b2a60d1e1e42012acd3e617610531d

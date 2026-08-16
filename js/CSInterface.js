@@ -10,6 +10,18 @@ CSInterface.prototype.evalScript = function(script, callback) {
     window.__adobe_cep__.evalScript(HOST_FUNCS + ';' + script, callback);
 };
 
+/**
+ * Return a host-system path. `type` is one of the CEP systemPath constants:
+ * "extension" returns the installed extension root (used by the updater to
+ * resolve installRoot reliably — the host cannot derive it via $.fileName).
+ */
+CSInterface.prototype.getSystemPath = function(type) {
+    if (window.__adobe_cep__ && typeof window.__adobe_cep__.getSystemPath === 'function') {
+        return window.__adobe_cep__.getSystemPath(type);
+    }
+    return null;
+};
+
 CSInterface.prototype.addEventListener = function(type, listener, obj) {
     window.addEventListener(type, listener, obj);
 };

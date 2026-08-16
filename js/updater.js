@@ -3,14 +3,17 @@
  *
  * Fetches version.json from the public GitHub repo on panel load (silently),
  * shows a soft non-blocking banner when a newer version exists, and applies
- * the update with "Direct file-write": the panel downloads each file, base64-
- * encodes it, and hands it to the host `writeUpdaterFile`, which decodes and
- * writes it into the install folder (byte-exact, incremental - only the files
- * listed in version.json are touched).
+ * the update: the panel downloads each file, base64-encodes it, and hands it
+ * to the host `writeUpdaterFile`, which decodes and stages it byte-exact into
+ * a temp folder (only the files listed in version.json are touched). Once all
+ * files are staged, `applyStagedUpdate` swaps them into the install folder
+ * in-process (delete+rename); a Startup script written by `finishStagedUpdate`
+ * is the automatic fallback for any file CEF keeps memory-mapped, and the swap
+ * finishes at the next AE launch.
  *
- * Reload strategy: CEP has no reliable "restart this panel" API, so after a
- * successful apply we location.reload() to pick up the new code; if the panel
- * is reloaded before all files are flushed, the user is told to close/reopen.
+ * Install root comes from the panel via CEP getSystemPath("extension"), never
+ * from the host: host code runs as an evalScript string where $.fileName is
+ * empty. After a full apply the panel reloads to pick up the new code.
  */
 
 // Repo that owns the update feed. Must be a public GitHub repo. Files are
@@ -38,12 +41,44 @@ var UPDATE_STATE = {
 };
 
 /**
+ * The installed extension root, resolved once and cached. The panel derives it
+ * reliably via the CEP systemPath API ("extension" = install root) because the
+ * host cannot: every host call runs as a string through evalScript, where
+ * $.fileName is empty. Fall back to parsing location.href (file://.../index.html)
+ * when the API is unavailable.
+ */
+var UPDATE_INSTALL_ROOT = null;
+
+function getInstallRoot() {
+    if (UPDATE_INSTALL_ROOT) return UPDATE_INSTALL_ROOT;
+    var root = null;
+    try {
+        root = csInterface.getSystemPath('extension');
+    } catch (e) { root = null; }
+    if (!root || root === 'extension') {
+        // Fallback: location.href is file:///C:/.../com.timesheet.extension/index.html
+        try {
+            var path = decodeURIComponent(location.href.split('?')[0].split('#')[0]);
+            path = path.replace(/^file:\/{3}/, '');
+            path = path.replace(/\/index\.html$/i, '');
+            if (path) root = path;
+        } catch (e) { root = null; }
+    }
+    if (root) {
+        // Normalize trailing slash so host path joins are clean.
+        UPDATE_INSTALL_ROOT = root.replace(/\/+$/, '');
+    }
+    return UPDATE_INSTALL_ROOT;
+}
+
+/**
  * Read the locally installed version: the version.json sitting in the install
  * root beside the panel (read synchronously by the host). When it is absent or
  * unreadable, fall back to the baked UPDATE_CURRENT_VERSION of this build.
  */
 function readLocalUpdaterVersion(callback) {
-    evalHost('readUpdaterVersion', [], function (result) {
+    var root = getInstallRoot();
+    evalHost('readUpdaterVersion', [root], function (result) {
         var version = null;
         if (result && result !== 'null' && result !== 'undefined') {
             try {
@@ -59,17 +94,20 @@ function readLocalUpdaterVersion(callback) {
 
 /**
  * Check for a newer version. Silent and non-blocking: called from initUpdater
- * on a timer so it never delays panel setup. Stores its result so applyUpdate
- * can reuse the comparison without a second fetch.
+ * on a timer (force=false) so it never delays panel setup. When force=true
+ * (manual "Check Update" button) the cooldown is skipped and the outcome is
+ * reported to the status bar.
  */
-function checkForUpdates() {
-    // Cooldown: don't hammer GitHub on every panel open.
+function checkForUpdates(force) {
+    // Cooldown: don't hammer GitHub on every panel open. Manual checks bypass it.
     var last = 0;
     try { last = parseInt(localStorage.getItem(UPDATE_LAST_CHECK_KEY)) || 0; } catch (e) {}
-    if (Date.now() - last < UPDATE_COOLDOWN_MS) {
+    if (!force && Date.now() - last < UPDATE_COOLDOWN_MS) {
         UPDATE_STATE.checked = true;
         return;
     }
+
+    if (force) updateStatus('Checking for updates...');
 
     readLocalUpdaterVersion(function (localVersion) {
         fetch(UPDATE_VERSION_URL)
@@ -81,15 +119,23 @@ function checkForUpdates() {
                 UPDATE_STATE.checked = true;
                 try { localStorage.setItem(UPDATE_LAST_CHECK_KEY, String(Date.now())); } catch (e) {}
 
-                if (!remote || !remote.version) return;
-                if (!localVersion || !isNewerVersion(remote.version, localVersion)) return;
+                if (!remote || !remote.version) {
+                    if (force) updateStatus('Update check: no version feed.');
+                    return;
+                }
+                if (!localVersion || !isNewerVersion(remote.version, localVersion)) {
+                    if (force) updateStatus('Timesheet is up to date (v' + remote.version + ').');
+                    return;
+                }
 
                 UPDATE_STATE.available = remote;
                 showUpdateBanner(remote);
             })
-            .catch(function () {
-                // Network/JSON failures are silent - no banner, no status spam.
+            .catch(function (err) {
+                // Network/JSON failures are silent on load, but a manual check
+                // should say why nothing happened.
                 UPDATE_STATE.checked = true;
+                if (force) updateStatus('Update check failed: ' + (err && err.message ? err.message : err));
             });
     });
 }
@@ -152,13 +198,19 @@ function escapeHtml(s) {
 
 /**
  * Apply the update: download each file listed in the remote version.json,
- * base64-encode it, write it via the host into the install folder. Sequential
- * so the host never gets concurrent writes. On success, reload to pick up
- * the new code (see reload note at the top).
+ * base64-encode it, stage it via the host, then swap the staged files into
+ * place in-process (delete+rename) and reload to pick up the new code. Any
+ * file that stays locked (CEF memory-maps the running panel's files) is left
+ * for the Startup-script fallback at the next AE launch.
  */
 function applyUpdate() {
     var remote = UPDATE_STATE.available;
     if (!remote || !remote.files || !remote.files.length) return;
+    var root = getInstallRoot();
+    if (!root) {
+        updateStatus('Update failed: cannot resolve extension install path.');
+        return;
+    }
 
     var banner = document.getElementById('updateBanner');
     if (banner) {
@@ -170,31 +222,75 @@ function applyUpdate() {
     var index = 0;
     var files = remote.files;
 
-    // The installed version.json must be refreshed too, or the next panel open
-    // would re-report the same update. Written from the remote's own fields.
+    // Stage the installed version.json too, or the next panel open would
+    // re-report the same update. It is staged like every other file and moved
+    // by the same swap.
     function syncInstalledVersion(done) {
         var localJson = JSON.stringify({
             version: remote.version || UPDATE_CURRENT_VERSION,
             releaseNotes: remote.releaseNotes || ''
         });
-        evalHost('writeUpdaterFile', ['version.json', utf8ToBase64(localJson)], function (result) {
-            done(result === 'true');
+        evalHost('writeUpdaterFile', [root, 'version.json', utf8ToBase64(localJson)], function (result) {
+            done(result === 'staged');
         });
+    }
+
+    // Reset the banner to a fresh state (used after errors + on completion).
+    function setBannerText(text) {
+        if (banner) {
+            banner.querySelector('.update-banner-text').textContent = text;
+        }
+    }
+
+    // Report an error and re-enable the Update button.
+    function fail(message) {
+        UPDATE_STATE.downloading = false;
+        setBannerText('Update failed: ' + message);
+        if (banner) {
+            var b = banner.querySelector('#updateActionBtn');
+            if (b) { b.disabled = false; b.textContent = 'Update'; }
+        }
     }
 
     function next() {
         if (index >= files.length) {
+            // All files staged. Swap them into place in-process; the Startup
+            // script fallback was already written by finishStagedUpdate inside
+            // applyStagedUpdate for any file that stays locked.
             syncInstalledVersion(function (ok) {
-                UPDATE_STATE.downloading = false;
-                UPDATE_STATE.applied = true;
-                if (banner) {
-                    banner.querySelector('.update-banner-text').textContent =
-                        ok ? 'Updated. Reloading...' : 'Updated (version note pending). Reloading...';
+                if (!ok) {
+                    UPDATE_STATE.downloading = false;
+                    fail('could not stage version.json');
+                    return;
                 }
-                // Reload picks up the freshly written files. CEP has no reliable
-                // close/reopen API; if the reload happens before the panel has
-                // fully flushed, the next open runs the new code anyway.
-                setTimeout(function () { window.location.reload(); }, 400);
+                evalHost('applyStagedUpdate', [root], function (applyResult) {
+                    UPDATE_STATE.downloading = false;
+
+                    if (applyResult === 'applied') {
+                        UPDATE_STATE.applied = true;
+                        setBannerText('Update applied (v' + (remote.version || '') + '). Reloading...');
+                        updateStatus('Update applied. Reloading panel...');
+                        // Best-effort cleanup of staging + the Startup fallback
+                        // script (the live swap already did the work).
+                        evalHost('cleanupStagedUpdate', [root], function () {
+                            setTimeout(function () { location.reload(); }, 300);
+                        });
+                        return;
+                    }
+
+                    if (typeof applyResult === 'string' && applyResult.indexOf('partial:') === 0) {
+                        var missed = applyResult.substring('partial:'.length);
+                        // Some files stayed locked (CEF memory-map). The Startup
+                        // script left in place by finishStagedUpdate finishes the
+                        // job at the next AE launch — no reload needed.
+                        setBannerText(missed + ' file' + (missed === '1' ? ' is' : 's are') +
+                            ' locked while running. Restart After Effects to finish.');
+                        updateStatus('Update partly applied. Restart After Effects to finish.');
+                        return;
+                    }
+
+                    fail(applyResult);
+                });
             });
             return;
         }
@@ -215,35 +311,25 @@ function applyUpdate() {
 
                 function writeOnce(retrying) {
                     attempts++;
-                    evalHost('writeUpdaterFile', [file.path, b64], function (result) {
-                        if (result !== 'true') {
+                    evalHost('writeUpdaterFile', [root, file.path, b64], function (result) {
+                        if (result !== 'staged') {
                             // A sharing violation / transient lock often clears
                             // within a few hundred ms — retry once before giving up.
                             if (!retrying && attempts <= 1) {
                                 setTimeout(function () { writeOnce(true); }, 250);
                                 return;
                             }
-                            UPDATE_STATE.downloading = false;
-                            if (banner) {
-                                banner.querySelector('.update-banner-text').textContent = 'Update failed: ' + result;
-                                var b = banner.querySelector('#updateActionBtn');
-                                if (b) { b.disabled = false; b.textContent = 'Update'; }
-                            }
+                            fail(result);
                             return;
                         }
-                        updateStatus('Updated ' + (file.path.split('/').pop()));
+                        updateStatus('Staged ' + (file.path.split('/').pop()));
                         next();
                     });
                 }
                 writeOnce(false);
             })
             .catch(function (err) {
-                UPDATE_STATE.downloading = false;
-                if (banner) {
-                    banner.querySelector('.update-banner-text').textContent = 'Update failed: ' + err.message;
-                    var b = banner.querySelector('#updateActionBtn');
-                    if (b) { b.disabled = false; b.textContent = 'Update'; }
-                }
+                fail(err.message);
             });
     }
 
