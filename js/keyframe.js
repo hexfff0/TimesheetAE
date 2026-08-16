@@ -5,7 +5,7 @@
 function syncLayers() {
     updateStatus('Syncing...');
 
-    csInterface.evalScript('getSelectedLayersInfo()', function (result) {
+    evalHost('getSelectedLayersInfo', [], function (result) {
         if (!result || result === 'null' || result === 'undefined') {
             updateStatus('Error: No selection');
             return;
@@ -20,12 +20,7 @@ function syncLayers() {
             }
 
             compInfo = data;
-            currentData = {};
-
-            // Initialize data structure (use array index as key)
-            compInfo.layers.forEach(function (layer, i) {
-                currentData[i] = {};
-            });
+            resetCurrentData();
 
             // Load existing keyframes
             loadExistingKeyframes();
@@ -39,9 +34,17 @@ function syncLayers() {
 function loadExistingKeyframes() {
     var layersProcessed = 0;
 
+    // Table + status build exactly once, after every layer has resolved (the
+    // "no time remap" layers resolve synchronously, so a single counter covers
+    // both branches — previously the all-empty case double-built the table).
+    function finishLoad() {
+        buildTable();
+        updateStatus(cellStatusBarText());
+    }
+
     compInfo.layers.forEach(function (layer, i) {
         if (layer.hasTimeRemap) {
-            csInterface.evalScript('readTimeRemapKeyframes(' + layer.index + ',"' + layer.name + '")', function (result) {
+            evalHost('readTimeRemapKeyframes', [layer.index, layer.name], function (result) {
                 try {
                     var data = JSON.parse(result);
 
@@ -53,32 +56,22 @@ function loadExistingKeyframes() {
                         });
                     }
                 } catch (e) {
+                    updateStatus('Error: Loading keyframes for ' + layer.name);
                     console.error('Error loading keyframes for ' + layer.name, e);
                 }
 
                 layersProcessed++;
                 if (layersProcessed === compInfo.layers.length) {
-                    buildTable();
-                    updateStatus(compInfo.layers.length + ' layers • ' +
-                        compInfo.fps + ' fps • ' + Math.round(compInfo.duration) + ' frames');
+                    finishLoad();
                 }
             });
         } else {
             layersProcessed++;
             if (layersProcessed === compInfo.layers.length) {
-                buildTable();
-                updateStatus(compInfo.layers.length + ' layers • ' +
-                    compInfo.fps + ' fps • ' + Math.round(compInfo.duration) + ' frames');
+                finishLoad();
             }
         }
     });
-
-    // Fallback if no time remap layers
-    if (compInfo.layers.every(function (l) { return !l.hasTimeRemap; })) {
-        buildTable();
-        updateStatus(compInfo.layers.length + ' layers • ' +
-            compInfo.fps + ' fps • ' + Math.round(compInfo.duration) + ' frames');
-    }
 }
 
 function handleCellInput(input) {
@@ -90,10 +83,8 @@ function handleCellInput(input) {
     if (selectedCells.size > 1 && selectedCells.has(currentKey)) {
         // Loop through and update all selected cells
         selectedCells.forEach(function (key) {
-            var parts = key.split('-');
-            var row = parts[0];
-            var col = parts[1];
-            var cell = document.querySelector('[data-row="' + row + '"][data-col="' + col + '"]');
+            var keyParts = parseCellKey(key);
+            var cell = getCell(keyParts.row, keyParts.col);
 
             if (cell) {
                 var targetInput = cell.querySelector('input');
@@ -105,11 +96,9 @@ function handleCellInput(input) {
 
                 // Update data and AE
                 if (value === '') {
-                    delete currentData[colIdx][row];
-                    deleteKeyframe(layerIndex, layerName, row - 1);
+                    clearCellValue(colIdx, keyParts.row, layerIndex, layerName);
                 } else {
-                    currentData[colIdx][row] = value;
-                    addKeyframe(layerIndex, layerName, row - 1, value);
+                    setCellValue(colIdx, keyParts.row, layerIndex, layerName, value);
                 }
             }
         });
@@ -121,37 +110,30 @@ function handleCellInput(input) {
         var layerName = input.parentElement.dataset.layerName;
         var layerIndex = compInfo.layers[col].index;
         if (value === '') {
-            delete currentData[col][row];
-            deleteKeyframe(layerIndex, layerName, row - 1);
+            clearCellValue(col, row, layerIndex, layerName);
         } else {
-            currentData[col][row] = value;
-            addKeyframe(layerIndex, layerName, row - 1, value);
+            setCellValue(col, row, layerIndex, layerName, value);
         }
+    }
+}
+
+/**
+ * Surface a host result that is not "true" as an error on the status bar. Host
+ * errors already carry the "Error: " prefix; add it only when missing.
+ */
+function reportHostError(result) {
+    if (result && result !== 'true') {
+        updateStatus(/^Error:/.test(result) ? result : 'Error: ' + result);
     }
 }
 
 function addKeyframe(layerIndex, layerName, frame, value) {
     var keyframeType = document.getElementById('keyframeType').value;
-
-    var scriptCall = 'addTimeRemapKeyframe(' + layerIndex + ',"' + layerName + '", ' + frame + ', ' +
-        value + ', "' + keyframeType + '", ' + compInfo.fps + ')';
-
-    csInterface.evalScript(scriptCall, function (result) {
-        if (result && result !== 'true') {
-            console.error('Error adding keyframe: ' + result);
-            updateStatus('Error: ' + result);
-        }
-    });
+    evalHost('addTimeRemapKeyframe', [layerIndex, layerName, frame, value, keyframeType, compInfo.fps], reportHostError);
 }
 
 function deleteKeyframe(layerIndex, layerName, frame) {
-    var scriptCall = 'deleteTimeRemapKeyframe(' + layerIndex + ',"' + layerName + '", ' + frame + ')';
-
-    csInterface.evalScript(scriptCall, function (result) {
-        if (result && result !== 'true') {
-            console.error('Error deleting keyframe: ' + result);
-        }
-    });
+    evalHost('deleteTimeRemapKeyframe', [layerIndex, layerName, frame], reportHostError);
 }
 
 /**
@@ -159,13 +141,10 @@ function deleteKeyframe(layerIndex, layerName, frame) {
  */
 function removeAllKeyframes() {
     // Call the native dialog function in AE
-    csInterface.evalScript('ConfirmDialog()', function (result) {
+    evalHost('ConfirmDialog', [], function (result) {
         if (result === "true") {
             // Reset UI and local data on success
-            currentData = {};
-            if (compInfo && compInfo.layers) {
-                compInfo.layers.forEach(function(l, i) { currentData[i] = {}; });
-            }
+            resetCurrentData();
             rebuildTable();
             updateStatus('Time Remap reset successfully.');
         }
@@ -183,10 +162,10 @@ function moveSelectedKeyframes(offset) {
     // Collect all selected cells data
     var cellsToMove = [];
     selectedCells.forEach(function (key) {
-        var parts = key.split('-');
-        var row = parseInt(parts[0]);
-        var col = parseInt(parts[1]);
-        var cell = document.querySelector('[data-row="' + row + '"][data-col="' + col + '"]');
+        var keyParts = parseCellKey(key);
+        var row = keyParts.row;
+        var col = keyParts.col;
+        var cell = getCell(row, col);
 
         if (cell) {
             var input = cell.querySelector('input');
@@ -228,28 +207,13 @@ function moveSelectedKeyframes(offset) {
         cellsToMove.sort(function (a, b) { return b.oldRow - a.oldRow; });
     }
 
-    // Store temp data to avoid overwriting
-    var tempData = [];
-    cellsToMove.forEach(function (item) {
-        tempData.push({
-            layerName: item.layerName,
-            oldRow: item.oldRow,
-            newRow: item.newRow,
-            value: item.value,
-            col: item.col,
-            layerIndex: item.layerIndex
-        });
-    });
-
     // Clear old positions - suppress blur to prevent value overwriting
     suppressBlurApply = true;
     cellsToMove.forEach(function (item) {
-        var oldCell = document.querySelector('[data-row="' + item.oldRow + '"][data-col="' + item.col + '"]');
+        var oldCell = getCell(item.oldRow, item.col);
         if (oldCell) {
-            var input = oldCell.querySelector('input');
-            input.value = '';
-            delete currentData[item.col][item.oldRow];
-            deleteKeyframe(item.layerIndex, item.layerName, item.oldRow - 1);
+            oldCell.querySelector('input').value = '';
+            clearCellValue(item.col, item.oldRow, item.layerIndex, item.layerName);
         }
     });
     suppressBlurApply = false; // Reset after clearing old positions
@@ -257,12 +221,10 @@ function moveSelectedKeyframes(offset) {
     // Set new positions
     clearSelection();
     cellsToMove.forEach(function (item) {
-        var newCell = document.querySelector('[data-row="' + item.newRow + '"][data-col="' + item.col + '"]');
+        var newCell = getCell(item.newRow, item.col);
         if (newCell) {
-            var input = newCell.querySelector('input');
-            input.value = item.value;
-            currentData[item.col][item.newRow] = item.value;
-            addKeyframe(item.layerIndex, item.layerName, item.newRow - 1, item.value);
+            newCell.querySelector('input').value = item.value;
+            setCellValue(item.col, item.newRow, item.layerIndex, item.layerName, item.value);
             selectCell(newCell);
         }
     });
@@ -293,16 +255,14 @@ function moveSingleCell(input, offset) {
 
     // Clear old position
     input.value = '';
-    delete currentData[col][row];
-    deleteKeyframe(layerIndex, layerName, row - 1);
+    clearCellValue(col, row, layerIndex, layerName);
 
     // Set new position
-    var newCell = document.querySelector('[data-row="' + newRow + '"][data-col="' + col + '"]');
+    var newCell = getCell(newRow, col);
     if (newCell) {
         var newInput = newCell.querySelector('input');
         newInput.value = value;
-        currentData[col][newRow] = value;
-        addKeyframe(layerIndex, layerName, newRow - 1, value);
+        setCellValue(col, newRow, layerIndex, layerName, value);
 
         // Focus and select new cell
         clearSelection();
@@ -325,15 +285,13 @@ function decreaseKeyframeValue(input, row, col) {
     if (currentValue <= 1) {
         // Delete keyframe
         input.value = '';
-        delete currentData[col][row];
-        deleteKeyframe(layerIndex, layerName, row - 1);
+        clearCellValue(col, row, layerIndex, layerName);
         updateStatus('Deleted');
     } else {
         // Decrease value
         var newValue = currentValue - 1;
         input.value = newValue;
-        currentData[col][row] = newValue;
-        addKeyframe(layerIndex, layerName, row - 1, newValue);
+        setCellValue(col, row, layerIndex, layerName, newValue);
         updateStatus('→ ' + newValue);
     }
 }
@@ -347,18 +305,15 @@ function increaseKeyframeValue(input, row, col) {
     var newValue = currentValue + 1;
 
     input.value = newValue;
-    currentData[col][row] = newValue;
-    addKeyframe(layerIndex, layerName, row - 1, newValue);
+    setCellValue(col, row, layerIndex, layerName, newValue);
     updateStatus('→ ' + newValue);
 }
 
 function fillSelectedCells(value) {
     var cells = Array.from(selectedCells);
     cells.forEach(function (key) {
-        var parts = key.split('-');
-        var row = parts[0];
-        var col = parts[1];
-        var cell = document.querySelector('[data-row="' + row + '"][data-col="' + col + '"]');
+        var keyParts = parseCellKey(key);
+        var cell = getCell(keyParts.row, keyParts.col);
         if (cell) {
             var input = cell.querySelector('input');
             input.value = value;
@@ -371,10 +326,8 @@ function fillSelectedCells(value) {
 function deleteSelectedCells() {
     var cells = Array.from(selectedCells);
     cells.forEach(function (key) {
-        var parts = key.split('-');
-        var row = parts[0];
-        var col = parts[1];
-        var cell = document.querySelector('[data-row="' + row + '"][data-col="' + col + '"]');
+        var keyParts = parseCellKey(key);
+        var cell = getCell(keyParts.row, keyParts.col);
         if (cell) {
             var input = cell.querySelector('input');
             input.value = '';

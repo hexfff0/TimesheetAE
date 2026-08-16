@@ -20,7 +20,7 @@ function buildTable() {
             th.textContent = layer.name;
             th.style.minWidth = '60px'; // Give a bit more room for names
         } else {
-            th.textContent = String.fromCharCode(65 + index); // A, B, C...
+            th.textContent = columnLabel(index); // A, B, C...
         }
         th.title = layer.name;
         headerRow.appendChild(th);
@@ -75,121 +75,12 @@ function buildTable() {
                 input.value = layerData[frame];
             }
 
-            // FIXED: Proper focus handling
-            input.addEventListener('focus', function (e) {
-                var cell = e.target.parentElement;
-                var key = cell.dataset.row + '-' + cell.dataset.col;
-
-                // If this cell is not in the currently selected group, clear old selection and select this one
-                // But if it's already in the selected group (Multi-select), don't clear selection
-                if (!selectedCells.has(key)) {
-                    clearSelection();
-                    selectCell(cell);
-                    setAnchor(cell);
-                }
-                e.target.select();
-            });
-
-            // FIXED: Proper input handling
-            input.addEventListener('change', function (e) {
-                handleCellInput(e.target);
-            });
-
-            input.addEventListener('blur', function (e) {
-                if (suppressBlurApply) return;
-                handleCellInput(e.target);
-            });
-
-            input.addEventListener('keydown', function (e) {
-                handleCellKeyDown(e);
-            });
-
+            // Cell behavior (focus/change/blur/keydown on the input, mousedown
+            // and drag-extend on the td) is handled once, delegated on
+            // #tableBody in setupTableHandlers() below — attaching per-cell
+            // listeners here would rebuild N handlers on every buildTable().
             td.appendChild(input);
             tr.appendChild(td);
-
-            td.addEventListener('mousedown', function (e) {
-                // Only respond to left button
-                if (e.button !== 0) return;
-                // Prevent blur trigger during selection change
-                suppressBlurApply = true;
-                setTimeout(function () { suppressBlurApply = false; }, 0);
-
-                // Normalize target to cell (click on input -> parent cell)
-                var cell = (e.target.tagName === 'INPUT') ? e.target.parentElement : e.target.closest('.data-cell');
-                if (!cell) return;
-                var key = cell.dataset.row + '-' + cell.dataset.col;
-
-                // Prepare move candidate if clicked on an already selected cell (no modifier)
-                if (!e.shiftKey && !e.ctrlKey && selectedCells.has(key)) {
-                    movingCandidate = true;
-                    moveMouseStart = { x: e.clientX, y: e.clientY };
-
-                    // If multi-select: allow drag to proceed, but also prepare for focus
-                    if (selectedCells.size > 1) {
-                        // Set a flag to focus this cell if no drag happens
-                        window.clickedMultiSelectCell = cell;
-                    }
-
-                    e.preventDefault();
-                    return;
-                } else {
-                    movingCandidate = false;
-                    window.clickedMultiSelectCell = null;
-                }
-
-                if (e.shiftKey) {
-                    // Use anchor if available, otherwise use first selected cell
-                    var anchor = selectionAnchor;
-                    if (!anchor) {
-                        var keys = Array.from(selectedCells);
-                        if (keys.length) {
-                            var parts = keys[0].split('-');
-                            anchor = document.querySelector('[data-row="' + parts[0] + '"][data-col="' + parts[1] + '"]');
-                        }
-                    }
-                    if (anchor) {
-                        dragStartCell = anchor;
-                        extendSelection(cell);
-                    } else {
-                        clearSelection();
-                        selectCell(cell);
-                        setAnchor(cell);
-                    }
-                } else if (e.ctrlKey || e.metaKey) {
-                    toggleCellSelection(cell);
-                    // If only one left, make it the anchor
-                    if (selectedCells.size === 1) {
-                        var onlyKey = Array.from(selectedCells)[0];
-                        var parts = onlyKey.split('-');
-                        setAnchor(document.querySelector('[data-row="' + parts[0] + '"][data-col="' + parts[1] + '"]'));
-                    }
-                } else {
-                    clearSelection();
-                    selectCell(cell);
-                    setAnchor(cell);
-                    // Don't focus here - will focus on mouseup if not dragging
-                    // This prevents blur from copying values during drag selection
-                }
-
-                // Start dragging selection from this anchor (if not set already)
-                if (!dragStartCell) dragStartCell = cell;
-                isDragging = true;
-                e.preventDefault();
-            });
-
-
-            td.addEventListener('mouseenter', function (e) {
-                // Only continue dragging if mouse button is still pressed (e.buttons === 1)
-                if (isDragging && e.buttons === 1) {
-                    // Extend selection from dragStartCell to current hovered cell
-                    extendSelection(this);
-                } else if (isDragging && e.buttons === 0) {
-                    // Mouse button released during drag
-                    isDragging = false;
-                    dragStartCell = null;
-                }
-
-            });
         });
 
         // Second label - FIXED
@@ -204,6 +95,136 @@ function buildTable() {
 
         tableBody.appendChild(tr);
     }
+}
+
+/**
+ * Attach the table's cell behavior once, delegated on #tableBody. Previously
+ * each of the ~frame×layer cells attached 5 listeners in buildTable(); this
+ * keeps that wiring identical but only sets it up a single time. Called from
+ * main.js on DOMContentLoaded (before the first buildTable).
+ */
+function setupTableHandlers() {
+    var tableBody = document.getElementById('tableBody');
+
+    // FIXED: Proper focus handling
+    tableBody.addEventListener('focusin', function (e) {
+        var input = e.target;
+        if (input.tagName !== 'INPUT') return;
+        var cell = input.parentElement;
+        var key = cell.dataset.row + '-' + cell.dataset.col;
+
+        // If this cell is not in the currently selected group, clear old selection and select this one
+        // But if it's already in the selected group (Multi-select), don't clear selection
+        if (!selectedCells.has(key)) {
+            clearSelection();
+            selectCell(cell);
+            setAnchor(cell);
+        }
+        input.select();
+    });
+
+    // FIXED: Proper input handling
+    tableBody.addEventListener('change', function (e) {
+        if (e.target.tagName !== 'INPUT') return;
+        handleCellInput(e.target);
+    });
+
+    tableBody.addEventListener('blur', function (e) {
+        if (e.target.tagName !== 'INPUT') return;
+        if (suppressBlurApply) return;
+        handleCellInput(e.target);
+    }, true); // capture: input blur fires before focus moves elsewhere
+
+    tableBody.addEventListener('keydown', function (e) {
+        if (e.target.tagName !== 'INPUT') return;
+        handleCellKeyDown(e);
+    });
+
+    tableBody.addEventListener('mousedown', function (e) {
+        // Only respond to left button
+        if (e.button !== 0) return;
+        // Prevent blur trigger during selection change
+        suppressBlurApply = true;
+        setTimeout(function () { suppressBlurApply = false; }, 0);
+
+        // Normalize target to cell (click on input -> parent cell)
+        var cell = (e.target.tagName === 'INPUT') ? e.target.parentElement : e.target.closest('.data-cell');
+        if (!cell) return;
+        var key = cell.dataset.row + '-' + cell.dataset.col;
+
+        // Prepare move candidate if clicked on an already selected cell (no modifier)
+        if (!e.shiftKey && !e.ctrlKey && selectedCells.has(key)) {
+            movingCandidate = true;
+            moveMouseStart = { x: e.clientX, y: e.clientY };
+
+            // If multi-select: allow drag to proceed, but also prepare for focus
+            if (selectedCells.size > 1) {
+                // Set a flag to focus this cell if no drag happens
+                clickedMultiSelectCell = cell;
+            }
+
+            e.preventDefault();
+            return;
+        } else {
+            movingCandidate = false;
+            clickedMultiSelectCell = null;
+        }
+
+        if (e.shiftKey) {
+            // Use anchor if available, otherwise use first selected cell
+            var anchor = selectionAnchor;
+            if (!anchor) {
+                var keys = Array.from(selectedCells);
+                if (keys.length) {
+                    var keyParts = parseCellKey(keys[0]);
+                    anchor = getCell(keyParts.row, keyParts.col);
+                }
+            }
+            if (anchor) {
+                dragStartCell = anchor;
+                extendSelection(cell);
+            } else {
+                clearSelection();
+                selectCell(cell);
+                setAnchor(cell);
+            }
+        } else if (e.ctrlKey || e.metaKey) {
+            toggleCellSelection(cell);
+            // If only one left, make it the anchor
+            if (selectedCells.size === 1) {
+                var onlyKey = Array.from(selectedCells)[0];
+                var onlyParts = parseCellKey(onlyKey);
+                setAnchor(getCell(onlyParts.row, onlyParts.col));
+            }
+        } else {
+            clearSelection();
+            selectCell(cell);
+            setAnchor(cell);
+            // Don't focus here - will focus on mouseup if not dragging
+            // This prevents blur from copying values during drag selection
+        }
+
+        // Start dragging selection from this anchor (if not set already)
+        if (!dragStartCell) dragStartCell = cell;
+        isDragging = true;
+        e.preventDefault();
+    });
+
+    // mouseenter does not bubble, so drag-extend must listen to the bubbling
+    // mouseover instead (fires once per cell boundary crossed).
+    tableBody.addEventListener('mouseover', function (e) {
+        var cell = (e.target.tagName === 'INPUT') ? e.target.parentElement : e.target.closest('.data-cell');
+        if (!cell) return;
+        // Only continue dragging if mouse button is still pressed (e.buttons === 1)
+        if (isDragging && e.buttons === 1) {
+            // Extend selection from dragStartCell to current hovered cell
+            extendSelection(cell);
+        } else if (isDragging && e.buttons === 0) {
+            // Mouse button released during drag
+            isDragging = false;
+            dragStartCell = null;
+        }
+    });
 }
 
 function rebuildTable() {

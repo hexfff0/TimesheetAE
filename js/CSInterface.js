@@ -25,36 +25,5 @@ CSInterface.prototype.dispatchEvent = function(event) {
     window.__adobe_cep__.dispatchEvent(event);
 };
 
-CSInterface.prototype.getSystemPath = function(pathType) {
-    var path = decodeURI(window.__adobe_cep__.getSystemPath(pathType));
-    var OSVersion = this.getOSInformation();
-    if (OSVersion.indexOf("Windows") >= 0) {
-        path = path.replace("file:///", "");
-    } else if (OSVersion.indexOf("Mac") >= 0) {
-        path = path.replace("file://", "");
-    }
-    return path;
-};
-
-CSInterface.prototype.getOSInformation = function() {
-    var userAgent = navigator.userAgent;
-    if (navigator.platform == "Win32" || navigator.platform == "Windows") {
-        return "Windows" + userAgent.substring(userAgent.indexOf("Windows NT") + 11, userAgent.indexOf("Windows NT") + 14);
-    } else if (navigator.platform == "MacIntel" || navigator.platform == "Macintosh") {
-        return "Mac" + userAgent.substring(userAgent.indexOf("Mac OS X") + 9, userAgent.indexOf("Mac OS X") + 14);
-    }
-    return "Unknown";
-};
-
-CSInterface.prototype.getApplicationID = function() {
-    var appId = this.hostEnvironment.appId;
-    return appId;
-};
-
-CSInterface.prototype.hostEnvironment = (function() {
-    var environment = window.__adobe_cep__ ? JSON.parse(window.__adobe_cep__.getHostEnvironment()) : null;
-    return environment;
-})();
-
 // Constants
 CSInterface.THEME_COLOR_CHANGED_EVENT = "com.adobe.csxs.events.ThemeColorChanged";

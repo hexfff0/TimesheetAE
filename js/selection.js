@@ -58,7 +58,7 @@ function extendSelection(endCell) {
 
     for (var r = minRow; r <= maxRow; r++) {
         for (var c = minCol; c <= maxCol; c++) {
-            var cell = document.querySelector('[data-row="' + r + '"][data-col="' + c + '"]');
+            var cell = getCell(r, c);
             if (cell && cell.classList.contains('data-cell')) {
                 selectCell(cell);
             }
@@ -74,7 +74,7 @@ function clearSelection() {
 }
 
 function navigateCell(row, col) {
-    var targetCell = document.querySelector('[data-row="' + row + '"][data-col="' + col + '"]');
+    var targetCell = getCell(row, col);
     if (targetCell && targetCell.classList.contains('data-cell')) {
         var input = targetCell.querySelector('input');
         if (input) {
@@ -87,9 +87,9 @@ function navigateCell(row, col) {
         }
     } else {
         // At boundary - stay at current position and maintain selection
-        var currentCell = document.querySelector('[data-row="' + (row + (row < 1 ? 1 : -1)) + '"][data-col="' + col + '"]');
+        var currentCell = getCell(row + (row < 1 ? 1 : -1), col);
         if (!currentCell) {
-            currentCell = document.querySelector('[data-row="' + row + '"][data-col="' + col + '"]');
+            currentCell = getCell(row, col);
         }
         if (currentCell) {
             // Re-select the cell because clearSelection() was likely called before navigation
@@ -113,7 +113,7 @@ function selectToTop(currentRow, currentCol) {
     clearSelection();
 
     for (var row = 1; row <= currentRow; row++) {
-        var cell = document.querySelector('[data-row="' + row + '"][data-col="' + currentCol + '"]');
+        var cell = getCell(row, currentCol);
         if (cell && cell.classList.contains('data-cell')) {
             selectCell(cell);
         }
@@ -129,7 +129,7 @@ function selectToBottom(currentRow, currentCol) {
     clearSelection();
 
     for (var row = currentRow; row <= compInfo.duration; row++) {
-        var cell = document.querySelector('[data-row="' + row + '"][data-col="' + currentCol + '"]');
+        var cell = getCell(row, currentCol);
         if (cell && cell.classList.contains('data-cell')) {
             selectCell(cell);
         }
@@ -141,7 +141,7 @@ function selectToBottom(currentRow, currentCol) {
 // Extend selection vertically (up or down)
 function extendSelectionVertical(direction, currentRow, currentCol) {
     var targetRow = currentRow + direction;
-    var cell = document.querySelector('[data-row="' + targetRow + '"][data-col="' + currentCol + '"]');
+    var cell = getCell(targetRow, currentCol);
 
     if (cell && cell.classList.contains('data-cell')) {
         selectCell(cell);

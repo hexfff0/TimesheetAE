@@ -499,6 +499,61 @@ tbody tr.second-border {
     text-overflow: ellipsis;
 }
 
+/* Soft update banner (non-blocking, self-updater) */
+#updateBanner.update-banner {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: 26px; /* sits above the status bar */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(28, 34, 48, 0.96);
+    border: 1px solid var(--accent-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--text-primary);
+    z-index: 1000;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+#updateBanner .update-banner-text {
+    flex: 1 1 auto;
+    white-space: normal;
+    line-height: 1.35;
+}
+#updateBanner .update-banner-btn {
+    background: var(--accent-color);
+    color: #fff;
+    border: 0;
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+#updateBanner .update-banner-btn:hover {
+    filter: brightness(1.1);
+}
+#updateBanner .update-banner-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+#updateBanner .update-banner-close {
+    background: transparent;
+    border: 0;
+    color: var(--text-secondary);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 2px 4px;
+}
+#updateBanner .update-banner-close:hover {
+    color: var(--text-primary);
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
     width: 10px;

@@ -1,0 +1,22 @@
+{
+  "version": "3.3.0",
+  "releaseNotes": "Adds a self-updater (silent check on load, soft banner, direct file-write updates).",
+  "files": [
+    { "path": "index.html" },
+    { "path": "css/styles.css" },
+    { "path": "js/CSInterface.js" },
+    { "path": "js/state.js" },
+    { "path": "js/ui.js" },
+    { "path": "js/selection.js" },
+    { "path": "js/keyframe.js" },
+    { "path": "js/export-import.js" },
+    { "path": "js/move.js" },
+    { "path": "js/camera.js" },
+    { "path": "js/updater.js" },
+    { "path": "js/events.js" },
+    { "path": "js/main.js" },
+    { "path": "js/host-funcs.js" },
+    { "path": "host/hostscript.jsx" },
+    { "path": "CSXS/manifest.xml" }
+  ]
+}

@@ -27,7 +27,7 @@ Tools for managing frame timing and layer synchronization.
 | **Remove All** | Remove all generated Time Remap data from connected layers.                                                      |
 | **Import**     | Import keyframe data from `.csv` or `.xdts`.                                                                     |
 | **Preview**    | Preview imported `.csv` or `.xdts` data in a modal table. Click column headers to add keyframes to selected AE layers. |
-| **Re-index**   | Automatically convert non-numeric values in `.csv` or `.xdts` into sequential numeric indexes starting from `1`. |
+| **Re-index**   | Ordered by origin value (smallest first keeps its number), fills `.`/non-numeric cells with sequential values, empties stay empty. Off by default; toggle in the Preview modal applies immediately. |
 
 ---
 

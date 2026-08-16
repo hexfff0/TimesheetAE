@@ -1,15 +1,112 @@
-﻿var HOST_FUNCS = `
-if(typeof JSON==='undefined')JSON={};if(typeof JSON.parse==='undefined')JSON.parse=function(s){return eval('('+s+')')};if(typeof JSON.stringify==='undefined')JSON.stringify=function(o){if(o===null||o===undefined)return'null';if(typeof o==='string')return'"'+o.replace(/"/g,'\\"')+'"';if(typeof o==='number'||typeof o==='boolean')return o.toString();if(o instanceof Array){var a=[];for(var i=0;i<o.length;i++)a.push(JSON.stringify(o[i]));return'['+a.join(',')+']'}var p=[];for(var k in o){if(o.hasOwnProperty(k)){var v=o[k];if(typeof v!=='function'&&typeof v!=='undefined')p.push('"'+k+'":'+JSON.stringify(v))}}return'{'+p.join(',')+'}'};
+// WARNING: This file is GENERATED from host/hostscript.jsx by build/host-bundle.js.
+// Do not edit it directly — edit host/hostscript.jsx and run `npm run dev:build`.
+
+var HOST_FUNCS = `
 /**
  * Timesheet Extension - Host Script
+ *
+ * This is the CANONICAL source of the ExtendScript that runs inside After
+ * Effects. js/host-funcs.js is generated from this file by build/host-bundle.js
+ * (see "npm run dev:build"). Never edit the generated file directly.
+ *
+ * ExtendScript (ES3) constraints apply: var only, no template literals,
+ * no let/const, no arrow functions.
+ *
+ * Conventions (do not "fix" without verifying in AE):
+ * - Layer lookup is always index-first, then name fallback (findLayer).
+ * - Frame indices are intentionally inconsistent per function; see the
+ *   comments on addTimeRemapKeyframe (0-based frame) vs
+ *   addTimeRemapKeyframe_Import (1-based frame). Keyframe VALUES are always
+ *   1-based and converted via (value - 1) / sourceFps.
+ * - Every mutating operation runs inside beginUndoGroup/endUndoGroup.
+ * - AE quirks are preserved on purpose: enabling time remap auto-creates two
+ *   keyframes (we keep the first), and deleting the last keyframe would
+ *   auto-disable time remap (so we park a placeholder keyframe instead).
  */
+
+/**
+ * Resolve a layer by index first, then by name, exactly as the original call
+ * sites did (index wins when it resolves; the name loop is the fallback).
+ * Returns the Layer or null.
+ */
+function findLayer(comp, layerIndex, layerName) {
+    var layer = null;
+    if (layerIndex !== undefined && layerIndex > 0) {
+        layer = comp.layer(layerIndex);
+    }
+    if (!layer && layerName !== undefined && layerName !== null) {
+        for (var i = 1; i <= comp.numLayers; i++) {
+            if (comp.layer(i).name === layerName) {
+                return comp.layer(i);
+            }
+        }
+    }
+    return layer;
+}
+
+/**
+ * Return the frame rate of a layer's source (footage conform rate, nested comp
+ * rate, or the comp rate as a last resort). Used to convert keyframe values.
+ */
+function sourceFrameRate(layer, fallbackFps) {
+    var sourceItem = layer.source;
+    if (sourceItem && sourceItem instanceof FootageItem) {
+        return sourceItem.mainSource.conformFrameRate || fallbackFps;
+    }
+    if (sourceItem && sourceItem instanceof CompItem) {
+        return sourceItem.frameRate;
+    }
+    return fallbackFps;
+}
+
+/**
+ * Return the active composition, or null when the active item is not a comp.
+ * Every host function guards with this check before doing any work.
+ */
+function activeComp() {
+    var comp = app.project.activeItem;
+    if (comp && comp instanceof CompItem) {
+        return comp;
+    }
+    return null;
+}
+
+/**
+ * Find the keyframe index on prop whose time is within 1/1000s of compTime,
+ * or -1 when no keyframe sits at that time.
+ */
+function keyIndexAtTime(prop, compTime) {
+    for (var i = 1; i <= prop.numKeys; i++) {
+        if (Math.abs(prop.keyTime(i) - compTime) < 0.001) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/**
+ * Set interpolation on the given keyframe index. Defaults to LINEAR; HOLD is
+ * applied only when keyframeType is "hold". No-op when keyIndex is invalid.
+ */
+function setKeyframeInterpolation(prop, keyIndex, keyframeType) {
+    if (keyIndex === -1) return;
+    if (keyframeType === "hold") {
+        prop.setInterpolationTypeAtKey(keyIndex,
+            KeyframeInterpolationType.LINEAR,
+            KeyframeInterpolationType.HOLD);
+    } else {
+        prop.setInterpolationTypeAtKey(keyIndex,
+            KeyframeInterpolationType.LINEAR,
+            KeyframeInterpolationType.LINEAR);
+    }
+}
 
 // Get information about selected layers
 function getSelectedLayersInfo() {
     try {
-        var comp = app.project.activeItem;
+        var comp = activeComp();
 
-        if (!comp || !(comp instanceof CompItem)) {
+        if (!comp) {
             return JSON.stringify({ error: "No active composition" });
         }
 
@@ -30,8 +127,8 @@ function getSelectedLayersInfo() {
         });
 
         var layersInfo = [];
-        for (var i = 0; i < sortedLayers.length; i++) {
-            var layer = sortedLayers[i];
+        for (var s = 0; s < sortedLayers.length; s++) {
+            var layer = sortedLayers[s];
             layersInfo.push({
                 name: layer.name,
                 index: layer.index,
@@ -60,25 +157,12 @@ function addTimeRemapKeyframe(layerIndex, layerName, frame, value, keyframeType,
     try {
         app.beginUndoGroup("Add Time Remap Keyframe");
 
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
+        var comp = activeComp();
+        if (!comp) {
             return "Error: No active composition";
         }
 
-        // Find layer by index first, fallback to name
-        var layer = null;
-        if (layerIndex !== undefined && layerIndex > 0) {
-            layer = comp.layer(layerIndex);
-        }
-        if (!layer) {
-            for (var i = 1; i <= comp.numLayers; i++) {
-                if (comp.layer(i).name === layerName) {
-                    layer = comp.layer(i);
-                    break;
-                }
-            }
-        }
-
+        var layer = findLayer(comp, layerIndex, layerName);
         if (!layer) {
             return "Error: Layer not found - " + layerName;
         }
@@ -115,45 +199,31 @@ function addTimeRemapKeyframe(layerIndex, layerName, frame, value, keyframeType,
         // Convert frame to time in comp timeline
         var compTime = frame / compFps;
 
-        // Get source layer info to handle FPS conversion
-        var sourceItem = layer.source;
-        var sourceFps = compFps; // Default to comp fps
-
-        if (sourceItem && sourceItem instanceof FootageItem) {
-            sourceFps = sourceItem.mainSource.conformFrameRate || compFps;
-        } else if (sourceItem && sourceItem instanceof CompItem) {
-            sourceFps = sourceItem.frameRate;
-        }
-
-        // Convert value (source frame number) to time in source timeline
-        // Value is 1-based (user enters 1, 2, 3...), so convert to 0-based for AE
-        // Then convert to time: (value - 1) / sourceFps
+        // Convert value (source frame number) to time in source timeline.
+        // Value is 1-based (user enters 1, 2, 3...), so the source time is
+        // (value - 1) / sourceFps using the layer's own frame rate.
+        var sourceFps = sourceFrameRate(layer, compFps);
         var sourceTime = (value - 1) / sourceFps;
 
         // Use setValueAtTime to create or update keyframe
         // This method is more reliable than addKey as it automatically handles duplicates
         timeRemapProp.setValueAtTime(compTime, sourceTime);
 
-        // Find the keyframe we just created/updated to set interpolation
-        var keyIndex = -1;
-        for (var i = 1; i <= timeRemapProp.numKeys; i++) {
-            var keyTime = timeRemapProp.keyTime(i);
-            if (Math.abs(keyTime - compTime) < 0.001) { // Within 1ms
-                keyIndex = i;
-                break;
-            }
-        }
+        // Find the keyframe we just created/updated and set interpolation
+        setKeyframeInterpolation(timeRemapProp, keyIndexAtTime(timeRemapProp, compTime), keyframeType);
 
-        // Set interpolation type
-        if (keyIndex !== -1) {
-            if (keyframeType === "hold") {
-                timeRemapProp.setInterpolationTypeAtKey(keyIndex,
-                    KeyframeInterpolationType.LINEAR,
-                    KeyframeInterpolationType.HOLD);
-            } else {
-                timeRemapProp.setInterpolationTypeAtKey(keyIndex,
-                    KeyframeInterpolationType.LINEAR,
-                    KeyframeInterpolationType.LINEAR);
+        // Mirror the import path (removeFirstKeyframeIfNeeded): enabling Time
+        // Remap makes AE auto-create a keyframe at comp frame 1. When the data
+        // being added does not start there, that auto key is a phantom that
+        // would otherwise survive and show up in the table at row 1. Safe to
+        // drop: the data key we just set keeps Time Remap enabled. frame is
+        // 0-based, so "starts at frame 1" is frame === 0.
+        if (justEnabled && frame !== 0) {
+            for (var i = 1; i <= timeRemapProp.numKeys; i++) {
+                if (Math.round(timeRemapProp.keyTime(i) * compFps) + 1 === 1) {
+                    timeRemapProp.removeKey(i);
+                    break;
+                }
             }
         }
 
@@ -166,44 +236,66 @@ function addTimeRemapKeyframe(layerIndex, layerName, frame, value, keyframeType,
     }
 }
 
-// Delete time remap keyframe
+/**
+ * Delete a time remap keyframe.
+ *
+ * Frames passed here are 0-based comp frames. When deleting the very last
+ * keyframe, AE would auto-disable Time Remap, so a temporary placeholder
+ * keyframe is parked at comp time 100.0s first to keep the property enabled.
+ */
 function deleteTimeRemapKeyframe(layerIndex, layerName, frame) {
     try {
         app.beginUndoGroup("Delete Time Remap Keyframe");
 
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
+        var comp = activeComp();
+        if (!comp) {
             return "Error: No active composition";
         }
 
-        // Find layer by index first, fallback to name
-        var layer = null;
-        if (layerIndex !== undefined && layerIndex > 0) {
-            layer = comp.layer(layerIndex);
-        }
-        if (!layer) {
-            for (var i = 1; i <= comp.numLayers; i++) {
-                if (comp.layer(i).name === layerName) {
-                    layer = comp.layer(i);
-                    break;
-                }
-            }
-        }
-
+        var layer = findLayer(comp, layerIndex, layerName);
         if (!layer || !layer.timeRemapEnabled) {
-            return "Error: Layer not found or time remap not enabled";
+            // No-op: the panel lets users clear cells on layers that never had
+            // Time Remap enabled, and a layer lookup can legitimately miss
+            // after the selection changes. With no Time Remap there are no
+            // keyframes to delete, so report success instead of an error.
+            return "true";
         }
 
         var timeRemapProp = layer.property("ADBE Time Remapping");
         var compFps = comp.frameRate;
         var compTime = frame / compFps;
 
-        // Find and delete keyframe
-        for (var i = 1; i <= timeRemapProp.numKeys; i++) {
-            var keyTime = timeRemapProp.keyTime(i);
-            if (Math.abs(keyTime - compTime) < 0.001) {
-                timeRemapProp.removeKey(i);
-                break;
+        // Find keyframe to delete
+        var keyIndexToDelete = keyIndexAtTime(timeRemapProp, compTime);
+
+        if (keyIndexToDelete !== -1) {
+            // Check if this would be the last keyframe
+            if (timeRemapProp.numKeys === 1) {
+                // Instead of disabling Time Remap, replace this keyframe with a temporary one
+                // at a different location to keep Time Remap enabled
+                var sourceFps = sourceFrameRate(layer, compFps);
+                var sourceDuration = 1.0;
+                var sourceItem = layer.source;
+                if (sourceItem && sourceItem instanceof FootageItem) {
+                    sourceDuration = sourceItem.duration;
+                } else if (sourceItem && sourceItem instanceof CompItem) {
+                    sourceDuration = sourceItem.duration;
+                }
+
+                var sourceFrameCount = Math.ceil(sourceDuration * sourceFps);
+
+                // Create a temporary keyframe at a high frame to keep Time Remap enabled
+                var tempCompTime = 100.0; // 100 seconds into comp
+                var tempSourceFrame = sourceFrameCount + 1;
+                var tempSourceTime = (tempSourceFrame - 1) / sourceFps;
+
+                timeRemapProp.setValueAtTime(tempCompTime, tempSourceTime);
+
+                // Now safe to delete the original keyframe (there's still the temp one)
+                timeRemapProp.removeKey(keyIndexToDelete);
+            } else {
+                // Safe to delete - there are other keyframes
+                timeRemapProp.removeKey(keyIndexToDelete);
             }
         }
 
@@ -219,24 +311,12 @@ function deleteTimeRemapKeyframe(layerIndex, layerName, frame) {
 // Read existing time remap keyframes
 function readTimeRemapKeyframes(layerIndex, layerName) {
     try {
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
+        var comp = activeComp();
+        if (!comp) {
             return JSON.stringify({ error: "No active composition" });
         }
 
-        var layer = null;
-        if (layerIndex !== undefined && layerIndex > 0) {
-            layer = comp.layer(layerIndex);
-        }
-        if (!layer) {
-            for (var i = 1; i <= comp.numLayers; i++) {
-                if (comp.layer(i).name === layerName) {
-                    layer = comp.layer(i);
-                    break;
-                }
-            }
-        }
-
+        var layer = findLayer(comp, layerIndex, layerName);
         if (!layer || !layer.timeRemapEnabled) {
             return JSON.stringify({ keyframes: [] });
         }
@@ -244,24 +324,14 @@ function readTimeRemapKeyframes(layerIndex, layerName) {
         var timeRemapProp = layer.property("ADBE Time Remapping");
         var keyframes = [];
         var compFps = comp.frameRate;
-
-        // Get source fps
-        var sourceItem = layer.source;
-        var sourceFps = compFps;
-
-        if (sourceItem && sourceItem instanceof FootageItem) {
-            sourceFps = sourceItem.mainSource.conformFrameRate || compFps;
-        } else if (sourceItem && sourceItem instanceof CompItem) {
-            sourceFps = sourceItem.frameRate;
-        }
+        var sourceFps = sourceFrameRate(layer, compFps);
 
         for (var i = 1; i <= timeRemapProp.numKeys; i++) {
             var keyTime = timeRemapProp.keyTime(i);
             var keyValue = timeRemapProp.keyValue(i);
 
-            // Convert times to frames
+            // Convert times to frames (0-based comp frame + 1-based source frame)
             var compFrame = Math.round(keyTime * compFps);
-            // Convert source time to 1-based frame number
             var sourceFrame = Math.round(keyValue * sourceFps) + 1;
 
             keyframes.push({
@@ -283,24 +353,12 @@ function clearAllTimeRemapKeyframes(layerIndex, layerName) {
     try {
         app.beginUndoGroup("Clear Time Remap Keyframes");
 
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
+        var comp = activeComp();
+        if (!comp) {
             return "Error: No active composition";
         }
 
-        var layer = null;
-        if (layerIndex !== undefined && layerIndex > 0) {
-            layer = comp.layer(layerIndex);
-        }
-        if (!layer) {
-            for (var i = 1; i <= comp.numLayers; i++) {
-                if (comp.layer(i).name === layerName) {
-                    layer = comp.layer(i);
-                    break;
-                }
-            }
-        }
-
+        var layer = findLayer(comp, layerIndex, layerName);
         if (!layer) {
             return "Error: Layer not found - " + layerName;
         }
@@ -332,24 +390,12 @@ function addTimeRemapKeyframe_Import(layerIndex, layerName, frame, value, keyfra
     try {
         app.beginUndoGroup("Add Time Remap Keyframe Import");
 
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
+        var comp = activeComp();
+        if (!comp) {
             return "Error: No active composition";
         }
 
-        var layer = null;
-        if (layerIndex !== undefined && layerIndex > 0) {
-            layer = comp.layer(layerIndex);
-        }
-        if (!layer) {
-            for (var i = 1; i <= comp.numLayers; i++) {
-                if (comp.layer(i).name === layerName) {
-                    layer = comp.layer(i);
-                    break;
-                }
-            }
-        }
-
+        var layer = findLayer(comp, layerIndex, layerName);
         if (!layer) {
             return "Error: Layer not found - " + layerName;
         }
@@ -372,37 +418,11 @@ function addTimeRemapKeyframe_Import(layerIndex, layerName, frame, value, keyfra
         // Convert 1-based frame to time
         var compTime = (frame - 1) / compFps;
 
-        var sourceItem = layer.source;
-        var sourceFps = compFps;
-        if (sourceItem && sourceItem instanceof FootageItem) {
-            sourceFps = sourceItem.mainSource.conformFrameRate || compFps;
-        } else if (sourceItem && sourceItem instanceof CompItem) {
-            sourceFps = sourceItem.frameRate;
-        }
-
+        var sourceFps = sourceFrameRate(layer, compFps);
         var sourceTime = (value - 1) / sourceFps;
         timeRemapProp.setValueAtTime(compTime, sourceTime);
 
-        var keyIndex = -1;
-        for (var i = 1; i <= timeRemapProp.numKeys; i++) {
-            var keyTime = timeRemapProp.keyTime(i);
-            if (Math.abs(keyTime - compTime) < 0.001) {
-                keyIndex = i;
-                break;
-            }
-        }
-
-        if (keyIndex !== -1) {
-            if (keyframeType === "hold") {
-                timeRemapProp.setInterpolationTypeAtKey(keyIndex,
-                    KeyframeInterpolationType.LINEAR,
-                    KeyframeInterpolationType.HOLD);
-            } else {
-                timeRemapProp.setInterpolationTypeAtKey(keyIndex,
-                    KeyframeInterpolationType.LINEAR,
-                    KeyframeInterpolationType.LINEAR);
-            }
-        }
+        setKeyframeInterpolation(timeRemapProp, keyIndexAtTime(timeRemapProp, compTime), keyframeType);
 
         app.endUndoGroup();
         return "true";
@@ -418,24 +438,12 @@ function removeFirstKeyframeIfNeeded(layerIndex, layerName, firstFrameFromCSV, f
     try {
         app.beginUndoGroup("Remove First Keyframe");
 
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
+        var comp = activeComp();
+        if (!comp) {
             return "Error: No active composition";
         }
 
-        var layer = null;
-        if (layerIndex !== undefined && layerIndex > 0) {
-            layer = comp.layer(layerIndex);
-        }
-        if (!layer) {
-            for (var i = 1; i <= comp.numLayers; i++) {
-                if (comp.layer(i).name === layerName) {
-                    layer = comp.layer(i);
-                    break;
-                }
-            }
-        }
-
+        var layer = findLayer(comp, layerIndex, layerName);
         if (!layer || !layer.timeRemapEnabled) {
             return "true";
         }
@@ -468,24 +476,12 @@ function trimLayerDuration(layerIndex, layerName, endFrame, maxFrame, fps) {
     try {
         app.beginUndoGroup("Trim Layer Duration");
 
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
+        var comp = activeComp();
+        if (!comp) {
             return "Error: No active composition";
         }
 
-        var layer = null;
-        if (layerIndex !== undefined && layerIndex > 0) {
-            layer = comp.layer(layerIndex);
-        }
-        if (!layer) {
-            for (var i = 1; i <= comp.numLayers; i++) {
-                if (comp.layer(i).name === layerName) {
-                    layer = comp.layer(i);
-                    break;
-                }
-            }
-        }
-
+        var layer = findLayer(comp, layerIndex, layerName);
         if (!layer) {
             return "Error: Layer not found - " + layerName;
         }
@@ -530,196 +526,12 @@ function trimLayerDuration(layerIndex, layerName, endFrame, maxFrame, fps) {
 }
 
 /**
- * Triggers the "Remove All" logic by calling a confirmation dialog
- * inside After Effects (Native UI).
- */
-function removeAllKeyframes() {
-    // We call a function in hostscript that triggers the native AE dialog
-    csInterface.evalScript('confirmAndDisableTimeRemap()', function (result) {
-        if (result === "true") {
-            // Success: Reset local data
-            currentData = {};
-            if (compInfo && compInfo.layers) {
-                compInfo.layers.forEach(function (layer, i) {
-                    currentData[i] = {};
-                });
-            }
-            rebuildTable();
-            updateStatus('All Time Remap keyframes removed.');
-        } else if (result === "cancelled") {
-            // User clicked 'No'
-            updateStatus('Operation cancelled.');
-        } else {
-            // Error occurred
-            updateStatus('Error: ' + result);
-        }
-    });
-}
-
-// Delete time remap keyframe - IMPROVED to preserve markers
-function deleteTimeRemapKeyframe(layerIndex, layerName, frame) {
-    try {
-        app.beginUndoGroup("Delete Time Remap Keyframe");
-
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
-            return "Error: No active composition";
-        }
-
-        // Find layer by index first, fallback to name
-        var layer = null;
-        if (layerIndex !== undefined && layerIndex > 0) {
-            layer = comp.layer(layerIndex);
-        }
-        if (!layer) {
-            for (var i = 1; i <= comp.numLayers; i++) {
-                if (comp.layer(i).name === layerName) {
-                    layer = comp.layer(i);
-                    break;
-                }
-            }
-        }
-
-        if (!layer || !layer.timeRemapEnabled) {
-            return "Error: Layer not found or time remap not enabled";
-        }
-
-        var timeRemapProp = layer.property("ADBE Time Remapping");
-        var compFps = comp.frameRate;
-        var compTime = frame / compFps;
-
-        // Find keyframe to delete
-        var keyIndexToDelete = -1;
-        for (var i = 1; i <= timeRemapProp.numKeys; i++) {
-            var keyTime = timeRemapProp.keyTime(i);
-            if (Math.abs(keyTime - compTime) < 0.001) {
-                keyIndexToDelete = i;
-                break;
-            }
-        }
-
-        if (keyIndexToDelete !== -1) {
-            // Check if this would be the last keyframe
-            if (timeRemapProp.numKeys === 1) {
-                // Instead of disabling Time Remap, replace this keyframe with a temporary one
-                // at a different location to keep Time Remap enabled
-                var sourceItem = layer.source;
-                var sourceFps = compFps;
-                var sourceDuration = 1.0;
-
-                if (sourceItem && sourceItem instanceof FootageItem) {
-                    sourceFps = sourceItem.mainSource.conformFrameRate || compFps;
-                    sourceDuration = sourceItem.duration;
-                } else if (sourceItem && sourceItem instanceof CompItem) {
-                    sourceFps = sourceItem.frameRate;
-                    sourceDuration = sourceItem.duration;
-                }
-
-                var sourceFrameCount = Math.ceil(sourceDuration * sourceFps);
-
-                // Create a temporary keyframe at a high frame to keep Time Remap enabled
-                var tempCompTime = 100.0; // 100 seconds into comp
-                var tempSourceFrame = sourceFrameCount + 1;
-                var tempSourceTime = (tempSourceFrame - 1) / sourceFps;
-
-                timeRemapProp.setValueAtTime(tempCompTime, tempSourceTime);
-
-                // Now safe to delete the original keyframe (there's still the temp one)
-                timeRemapProp.removeKey(keyIndexToDelete);
-            } else {
-                // Safe to delete - there are other keyframes
-                timeRemapProp.removeKey(keyIndexToDelete);
-            }
-        }
-
-        app.endUndoGroup();
-        return "true";
-
-    } catch (e) {
-        app.endUndoGroup();
-        return "Error: " + e.toString();
-    }
-}
-
-// Clean up temporary keyframes (both markers and temp placeholders)
-function cleanupTemporaryKeyframes(layerIndex, layerName, compFps) {
-    try {
-        app.beginUndoGroup("Cleanup Temporary Keyframes");
-
-        var comp = app.project.activeItem;
-        if (!comp || !(comp instanceof CompItem)) {
-            return "Error: No active composition";
-        }
-
-        var layer = null;
-        if (layerIndex !== undefined && layerIndex > 0) {
-            layer = comp.layer(layerIndex);
-        }
-        if (!layer) {
-            for (var i = 1; i <= comp.numLayers; i++) {
-                if (comp.layer(i).name === layerName) {
-                    layer = comp.layer(i);
-                    break;
-                }
-            }
-        }
-
-        if (!layer || !layer.timeRemapEnabled) {
-            app.endUndoGroup();
-            return "true";
-        }
-
-        var timeRemapProp = layer.property("ADBE Time Remapping");
-        var sourceItem = layer.source;
-        var sourceFps = compFps;
-        var sourceDuration = 1.0;
-
-        if (sourceItem && sourceItem instanceof FootageItem) {
-            sourceFps = sourceItem.mainSource.conformFrameRate || compFps;
-            sourceDuration = sourceItem.duration;
-        } else if (sourceItem && sourceItem instanceof CompItem) {
-            sourceFps = sourceItem.frameRate;
-            sourceDuration = sourceItem.duration;
-        }
-
-        var sourceFrameCount = Math.ceil(sourceDuration * sourceFps);
-        var markerSourceFrame = sourceFrameCount + 1;
-        var markerSourceTime = (markerSourceFrame - 1) / sourceFps;
-
-        // Find and remove all keyframes that are markers or temps
-        // Work backwards to avoid index issues
-        for (var i = timeRemapProp.numKeys; i >= 1; i--) {
-            var keyTime = timeRemapProp.keyTime(i);
-            var keyValue = timeRemapProp.keyValue(i);
-            var keyFrameNumber = Math.round(keyValue * sourceFps) + 1;
-
-            // Check if this is a marker (value = sourceFrameCount + 1)
-            var isMarker = (keyFrameNumber === markerSourceFrame);
-
-            // Check if this is a temp placeholder (comp time > 50 seconds)
-            var isTemp = (keyTime > 50.0);
-
-            // Remove if it's a marker or temp, but keep at least 1 keyframe
-            if ((isMarker || isTemp) && timeRemapProp.numKeys > 1) {
-                timeRemapProp.removeKey(i);
-            }
-        }
-
-        app.endUndoGroup();
-        return "true";
-    } catch (e) {
-        app.endUndoGroup();
-        return "Error: " + e.toString();
-    }
-}
-
-/**
  * Displays ScriptUI dialog for confirmation.
  * @return {string} "true" if confirmed, "false" if cancelled.
  */
 function ConfirmDialog() {
-    var comp = app.project.activeItem;
-    if (!comp || !(comp instanceof CompItem)) return "Error: No active composition";
+    var comp = activeComp();
+    if (!comp) return "Error: No active composition";
 
     var selectedLayers = comp.selectedLayers;
     if (selectedLayers.length === 0) return "Error: No layers selected";
@@ -770,43 +582,45 @@ function ConfirmDialog() {
     }
 }
 
-function importDougaData(jsonStr) {
-    var data;
-    try { data = JSON.parse(jsonStr); } catch (e) { return JSON.stringify({ error: 'JSON parse: ' + e.toString() }); }
-    var columns = data.columns || [];
-    var fps = data.fps || 24;
-
-    var comp = app.project.activeItem;
-    if (!comp || !(comp instanceof CompItem)) {
-        return JSON.stringify({ error: 'No active comp. Sync layers first.' });
-    }
-
-    app.beginUndoGroup('Import Timesheet Douga');
-    var layerCount = 0;
-    var totalKeys = 0;
-    for (var c = 0; c < columns.length; c++) {
-        var col = columns[c];
-        var cells = col.cells || [];
-        if (!cells.length) continue;
-        var label = col.label || col.layerName;
-        var layer = null;
-        for (var i = 1; i <= comp.numLayers; i++) {
-            if (comp.layer(i).name === label) { layer = comp.layer(i); break; }
-        }
-        if (!layer) continue;
-        clearAllTimeRemapKeyframes(layer.name);
-        for (var k = 0; k < cells.length; k++) {
-            if (addTimeRemapKeyframe_Import(layer.name, cells[k].frame, cells[k].value, 'hold', fps) === 'true') totalKeys++;
-        }
-        layerCount++;
-    }
-    app.endUndoGroup();
-    return JSON.stringify({ layerCount: layerCount, keyframeCount: totalKeys });
+/**
+ * Build the four camera-link expression strings. sourceRef is the JS
+ * expression prefix used to reach the linked comp: createCompFromSelection
+ * targets the pre-comp with thisLayer.source, addCameraLinkExpression targets
+ * the parent layer's source directly. See the rebuild script on why the source
+ * string is interpolated inline rather than concatenated per-expression.
+ */
+function cameraExpressions(sourceRef) {
+    // NOTE: the original expressions embed the two characters backslash-n (not
+    // a real newline) between statements. That byte-exact form is preserved.
+    var p = 'for (var i = 1; i < ' + sourceRef + '.numLayers + 1; ++i) {\\n' +
+        'bclr = ' + sourceRef + '.layer(i);\\n' +
+        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n';
+    var scale = 'transform.scale;\\n' + p +
+        'bc = ' + sourceRef + '.layer(i);\\n' +
+        'scl = bc.scale.valueAtTime(time-thisLayer.startTime) * 0.01;\\n' +
+        'while (true){\\n' +
+        'if(!bc.hasParent) break;\\n' +
+        'bc = bc.parent;\\n' +
+        'for (var i=0; i < 2; i++) {scl[i]*=bc.scale.valueAtTime(time-thisLayer.startTime)[i]/100}\\n' +
+        '}\\n' +
+        '[1/scl[0]*transform.scale[0],1/scl[1]*transform.scale[1]]\\n' +
+        'break;}transform.scale;}';
+    var pos = 'transform.position;\\n' + p +
+        sourceRef + '.layer(i).transform.anchorPoint.valueAtTime(time-thisLayer.startTime);\\n' +
+        'break;}transform.position;}';
+    var rot = 'transform.rotation;\\n' + p +
+        'rt = ' + sourceRef + '.layer(i).toWorldVec([1,0,0],time-thisLayer.startTime); -radiansToDegrees(Math.atan2(rt[1],rt[0]));\\n' +
+        'break;}transform.rotation;}';
+    var anchor = 'transform.anchorPoint;\\n' + p +
+        'bc = ' + sourceRef + '.layer(i);\\n' +
+        'bc.toWorld(bc.anchorPoint.valueAtTime(time-thisLayer.startTime));\\n' +
+        'break;}transform.anchorPoint;}';
+    return { scale: scale, pos: pos, rot: rot, anchor: anchor };
 }
 
 function createCameraSolid(w, h, dataJson) {
-    var comp = app.project.activeItem;
-    if (!(comp instanceof CompItem)) return "Error: No active comp";
+    var comp = activeComp();
+    if (!comp) return "Error: No active comp";
     var data = eval(dataJson);
     if (!data || !data.length) return "Error: No camera data";
     app.beginUndoGroup("Import XDTS Camera");
@@ -855,100 +669,38 @@ function createCompFromSelection(w, h) {
     app.beginUndoGroup("New Comp from Selection");
     var newComp = app.project.items.addComp("Camera", w, h, 1, comp.duration, comp.frameRate);
     var preCompLayer = newComp.layers.add(comp);
-    var scaleExpr = 'transform.scale;\\n' +
-        'for (var i = 1; i < thisLayer.source.numLayers + 1; ++i) {\\n' +
-        'bclr = thisLayer.source.layer(i);\\n' +
-        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
-        'bc = thisLayer.source.layer(i);\\n' +
-        'scl = bc.scale.valueAtTime(time-thisLayer.startTime) * 0.01;\\n' +
-        'while (true){\\n' +
-        'if(!bc.hasParent) break;\\n' +
-        'bc = bc.parent;\\n' +
-        'for (var i=0; i < 2; i++) {scl[i]*=bc.scale.valueAtTime(time-thisLayer.startTime)[i]/100}\\n' +
-        '}\\n' +
-        '[1/scl[0]*transform.scale[0],1/scl[1]*transform.scale[1]]\\n' +
-        'break;}transform.scale;}';
-    var posExpr = 'transform.position;\\n' +
-        'for (var i = 1; i < thisLayer.source.numLayers + 1; ++i) {\\n' +
-        'bclr = thisLayer.source.layer(i);\\n' +
-        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
-        'thisLayer.source.layer(i).transform.anchorPoint.valueAtTime(time-thisLayer.startTime);\\n' +
-        'break;}transform.position;}';
-    var rotExpr = 'transform.rotation;\\n' +
-        'for (var i = 1; i < thisLayer.source.numLayers + 1; ++i) {\\n' +
-        'bclr = thisLayer.source.layer(i);\\n' +
-        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
-        'rt = thisLayer.source.layer(i).toWorldVec([1,0,0],time-thisLayer.startTime); -radiansToDegrees(Math.atan2(rt[1],rt[0]));\\n' +
-        'break;}transform.rotation;}';
-    var anchorExpr = 'transform.anchorPoint;\\n' +
-        'for (var i = 1; i < thisLayer.source.numLayers + 1; ++i) {\\n' +
-        'bclr = thisLayer.source.layer(i);\\n' +
-        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
-        'bc = thisLayer.source.layer(i);\\n' +
-        'bc.toWorld(bc.anchorPoint.valueAtTime(time-thisLayer.startTime));\\n' +
-        'break;}transform.anchorPoint;}';
+    var exprs = cameraExpressions("thisLayer.source");
     var t = preCompLayer.property("ADBE Transform Group");
     if (t) {
-        try { t.property("ADBE Scale").expression = scaleExpr; } catch (e) {}
-        try { t.property("ADBE Position").expression = posExpr; } catch (e) {}
-        try { t.property("ADBE Rotate Z").expression = rotExpr; } catch (e) {}
-        try { t.property("ADBE Anchor Point").expression = anchorExpr; } catch (e) {}
+        try { t.property("ADBE Scale").expression = exprs.scale; } catch (e) {}
+        try { t.property("ADBE Position").expression = exprs.pos; } catch (e) {}
+        try { t.property("ADBE Rotate Z").expression = exprs.rot; } catch (e) {}
+        try { t.property("ADBE Anchor Point").expression = exprs.anchor; } catch (e) {}
     }
     app.endUndoGroup();
     return "true";
 }
 
 function addCameraLinkExpression(w, h) {
-    var comp = app.project.activeItem;
-    if (!(comp instanceof CompItem)) return "Error: No active comp";
+    var comp = activeComp();
+    if (!comp) return "Error: No active comp";
     var sel = comp.selectedLayers;
     if (!sel || sel.length === 0) return "Error: No layer selected";
     app.beginUndoGroup("Add Camera Link Expression");
-    var scaleExpr = 'transform.scale;\\n' +
-        'for (var i = 1; i < source.numLayers + 1; ++i) {\\n' +
-        'bclr = source.layer(i);\\n' +
-        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
-        'bc = source.layer(i);\\n' +
-        'scl = bc.scale.valueAtTime(time-thisLayer.startTime) * 0.01;\\n' +
-        'while (true){\\n' +
-        'if(!bc.hasParent) break;\\n' +
-        'bc = bc.parent;\\n' +
-        'for (var i=0; i < 2; i++) {scl[i]*=bc.scale.valueAtTime(time-thisLayer.startTime)[i]/100}\\n' +
-        '}\\n' +
-        '[1/scl[0]*transform.scale[0],1/scl[1]*transform.scale[1]]\\n' +
-        'break;}transform.scale;}';
-    var posExpr = 'transform.position;\\n' +
-        'for (var i = 1; i < source.numLayers + 1; ++i) {\\n' +
-        'bclr = source.layer(i);\\n' +
-        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
-        'source.layer(i).transform.anchorPoint.valueAtTime(time-thisLayer.startTime);\\n' +
-        'break;}transform.position;}';
-    var rotExpr = 'transform.rotation;\\n' +
-        'for (var i = 1; i < source.numLayers + 1; ++i) {\\n' +
-        'bclr = source.layer(i);\\n' +
-        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
-        'rt = source.layer(i).toWorldVec([1,0,0],time-thisLayer.startTime); -radiansToDegrees(Math.atan2(rt[1],rt[0]));\\n' +
-        'break;}transform.rotation;}';
-    var anchorExpr = 'transform.anchorPoint;\\n' +
-        'for (var i = 1; i < source.numLayers + 1; ++i) {\\n' +
-        'bclr = source.layer(i);\\n' +
-        'if (bclr.name.indexOf("camera") == 0 && (bclr.time>=bclr.inPoint) && (bclr.time<bclr.outPoint)){\\n' +
-        'bc = source.layer(i);\\n' +
-        'bc.toWorld(bc.anchorPoint.valueAtTime(time-thisLayer.startTime));\\n' +
-        'break;}transform.anchorPoint;}';
+    var exprs = cameraExpressions("source");
     for (var s = 0; s < sel.length; s++) {
         var layer = sel[s];
         var t = layer.property("ADBE Transform Group");
         if (t) {
             try {
                 var scaleProp = t.property("ADBE Scale");
-                if (scaleProp && scaleProp.canSetExpression) scaleProp.expression = scaleExpr;
+                if (scaleProp && scaleProp.canSetExpression) scaleProp.expression = exprs.scale;
                 var posProp = t.property("ADBE Position");
-                if (posProp && posProp.canSetExpression) posProp.expression = posExpr;
+                if (posProp && posProp.canSetExpression) posProp.expression = exprs.pos;
                 var rotProp = t.property("ADBE Rotate Z");
-                if (rotProp && rotProp.canSetExpression) rotProp.expression = rotExpr;
+                if (rotProp && rotProp.canSetExpression) rotProp.expression = exprs.rot;
                 var anchorProp = t.property("ADBE Anchor Point");
-                if (anchorProp && anchorProp.canSetExpression) anchorProp.expression = anchorExpr;
+                if (anchorProp && anchorProp.canSetExpression) anchorProp.expression = exprs.anchor;
             } catch (e) {}
         }
     }
@@ -956,4 +708,120 @@ function addCameraLinkExpression(w, h) {
     return "true";
 }
 
-`;
+/**
+ * Self-updater helpers (panel updater.js drives these via evalHost).
+ * The host script lives at <installRoot>/host/hostscript.jsx, so the install
+ * root is always Folder($.fileName).parent.parent — no path has to come from
+ * the panel.
+ */
+
+/**
+ * Decode a base64 string to a binary string of single-char bytes, using a
+ * hand-rolled ES3-safe decoder (ExtendScript has no atob).
+ */
+function base64Decode(base64) {
+    var lookup = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    var result = "";
+    var buffer = [0, 0, 0];
+    var byteCount = 0;
+    var i = 0;
+    for (i = 0; i < base64.length; i++) {
+        var c = base64.charAt(i);
+        if (c === "=" || c === "" ) break; // padding terminates the stream
+        var index = lookup.indexOf(c);
+        if (index < 0) continue; // skip whitespace/newlines
+        buffer[byteCount] = index;
+        byteCount++;
+        if (byteCount === 4) {
+            result += String.fromCharCode(
+                (buffer[0] << 2) | (buffer[1] >> 4),
+                ((buffer[1] & 15) << 4) | (buffer[2] >> 2),
+                ((buffer[2] & 3) << 6) | buffer[3]
+            );
+            byteCount = 0;
+        }
+    }
+    if (byteCount === 2) {
+        result += String.fromCharCode((buffer[0] << 2) | (buffer[1] >> 4));
+    } else if (byteCount === 3) {
+        result += String.fromCharCode(
+            (buffer[0] << 2) | (buffer[1] >> 4),
+            ((buffer[1] & 15) << 4) | (buffer[2] >> 2)
+        );
+    }
+    return result;
+}
+
+/**
+ * Return the installed extension root folder (parent of host/).
+ */
+function updaterRoot() {
+    return File($.fileName).parent.parent;
+}
+
+/**
+ * Read the installed copy's version.json (the local version the updater
+ * compares against). Returns its raw text, or "null" when it is absent.
+ */
+function readUpdaterVersion() {
+    try {
+        var localFile = new File(updaterRoot().fsName + "/version.json");
+        if (!localFile.exists) return "null";
+        localFile.encoding = "UTF-8";
+        localFile.open("r");
+        var content = localFile.read();
+        localFile.close();
+        return content;
+    } catch (e) {
+        return "Error: " + e.toString();
+    }
+}
+
+/**
+ * Recursively create a folder chain (Folder.create() only makes one level).
+ * ES3-safe; returns true when the folder exists by the end.
+ */
+function ensureFolder(folder) {
+    try {
+        if (folder.exists) return true;
+        var parent = folder.parent;
+        if (parent === null) return false; // can't create above the drive root
+        if (!ensureFolder(parent)) return false;
+        return folder.create();
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Write an update payload (base64) to <installRoot>/filePath, creating parent
+ * folders as needed. filePath must be extension-relative; ".." traversal is
+ * rejected. Encoding BINARY + a pre-decoded byte string preserves bytes
+ * exactly (no CRLF translation).
+ */
+function writeUpdaterFile(filePath, base64) {
+    try {
+        if (!filePath || filePath.indexOf("..") !== -1 || filePath.indexOf("/") === 0) {
+            return "Error: Invalid update path - " + filePath;
+        }
+        // The panel always sends forward-slash paths, so no normalization is
+        // needed. Avoid backslash escape sequences here: the host bundle embeds
+        // this script in a JS template literal that would decode them.
+        var target = new File(updaterRoot().fsName + "/" + filePath);
+        if (!ensureFolder(target.parent)) {
+            return "Error: Cannot create folder - " + filePath;
+        }
+        var data = base64Decode(base64);
+        target.encoding = "BINARY";
+        if (!target.open("w")) {
+            return "Error: Cannot open for write - " + filePath;
+        }
+        target.write(data);
+        target.close();
+        return "true";
+    } catch (e) {
+        return "Error: " + e.toString();
+    }
+}`;
+
+// HOST_BUNDLE_SHA256=3bc61871aa0ae4942d6d08f0d3a26960c1df8897c0b330a512654fdbc069f9d2
