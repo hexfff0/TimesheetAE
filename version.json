@@ -1,5 +1,5 @@
 {
-  "version": "3.3.0",
+  "version": "3.3.1",
   "releaseNotes": "Adds a self-updater (silent check on load, soft banner, direct file-write updates).",
   "files": [
     { "path": "index.html" },
