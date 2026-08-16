@@ -211,19 +211,31 @@ function applyUpdate() {
             })
             .then(function (buf) {
                 var b64 = arrayBufferToBase64(buf);
-                evalHost('writeUpdaterFile', [file.path, b64], function (result) {
-                    if (result !== 'true') {
-                        UPDATE_STATE.downloading = false;
-                        if (banner) {
-                            banner.querySelector('.update-banner-text').textContent = 'Update failed: ' + result;
-                            var b = banner.querySelector('#updateActionBtn');
-                            if (b) { b.disabled = false; b.textContent = 'Update'; }
+                var attempts = 0;
+
+                function writeOnce(retrying) {
+                    attempts++;
+                    evalHost('writeUpdaterFile', [file.path, b64], function (result) {
+                        if (result !== 'true') {
+                            // A sharing violation / transient lock often clears
+                            // within a few hundred ms — retry once before giving up.
+                            if (!retrying && attempts <= 1) {
+                                setTimeout(function () { writeOnce(true); }, 250);
+                                return;
+                            }
+                            UPDATE_STATE.downloading = false;
+                            if (banner) {
+                                banner.querySelector('.update-banner-text').textContent = 'Update failed: ' + result;
+                                var b = banner.querySelector('#updateActionBtn');
+                                if (b) { b.disabled = false; b.textContent = 'Update'; }
+                            }
+                            return;
                         }
-                        return;
-                    }
-                    updateStatus('Updated ' + (file.path.split('/').pop()));
-                    next();
-                });
+                        updateStatus('Updated ' + (file.path.split('/').pop()));
+                        next();
+                    });
+                }
+                writeOnce(false);
             })
             .catch(function (err) {
                 UPDATE_STATE.downloading = false;

@@ -809,12 +809,26 @@ function writeUpdaterFile(filePath, base64) {
         }
         var data = base64Decode(base64);
         target.encoding = "BINARY";
-        if (!target.open("w")) {
-            return "Error: Cannot open for write - " + filePath;
+        // Try "e" (edit, no-truncate) first: writing the running panel's own
+        // HTML via truncating "w" fails with a sharing violation because CEF
+        // keeps the file memory-mapped. In-place "e" + length setter avoids
+        // that. Fall back to "w" for older hosts where "e" is unavailable.
+        var opened = false;
+        if (target.open("e")) {
+            target.seek(0);
+            target.write(data);
+            target.length = data.length;
+            opened = true;
+        } else if (target.open("w")) {
+            target.write(data);
+            opened = true;
         }
-        target.write(data);
-        target.close();
-        return "true";
+        if (opened) {
+            target.close();
+            return "true";
+        }
+        return "Error: Cannot open for write - " + filePath +
+            " (error: " + target.error + ")";
     } catch (e) {
         return "Error: " + e.toString();
     }
