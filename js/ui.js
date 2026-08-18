@@ -264,12 +264,23 @@ function setupCustomDropdowns() {
         wrapper.appendChild(customSelect);
 
         // Create Trigger
-        var trigger = document.createElement('div');
+        var trigger = document.createElement('button');
+        trigger.type = 'button';
         trigger.className = 'custom-select-trigger';
-        // HTML in trigger for arrow
+        trigger.setAttribute('aria-haspopup', 'listbox');
+        trigger.setAttribute('aria-expanded', 'false');
+        // The native select is display:none, so label[for] cannot name the
+        // trigger; carry the visible label text over as its accessible name.
+        if (select.id) {
+            var associatedLabel = document.querySelector('label[for="' + select.id + '"]');
+            if (associatedLabel) {
+                var labelText = associatedLabel.textContent.trim();
+                if (labelText) trigger.setAttribute('aria-label', labelText);
+            }
+        }
         var selectedOption = select.options[select.selectedIndex];
         trigger.innerHTML = '<span>' + selectedOption.text + '</span>' +
-            '<div class="custom-arrow">' +
+            '<div class="custom-arrow" aria-hidden="true">' +
             '<svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">' +
             '<path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' +
             '</svg></div>';
@@ -278,52 +289,148 @@ function setupCustomDropdowns() {
         // Create Options Container
         var optionsDiv = document.createElement('div');
         optionsDiv.className = 'custom-options';
+        optionsDiv.setAttribute('role', 'listbox');
         customSelect.appendChild(optionsDiv);
 
-        // Populate Options
-        Array.from(select.options).forEach(function (option) {
-            var customOption = document.createElement('div');
-            customOption.className = 'custom-option';
-            customOption.textContent = option.text;
-            customOption.dataset.value = option.value;
-            if (option.selected) {
-                customOption.classList.add('selected');
+        var optionEls = [];
+
+        // Rebuild the option list (label links to the trigger).
+        function renderOptions() {
+            optionsDiv.innerHTML = '';
+            optionEls = [];
+            var nodes = select.options;
+            for (var k = 0; k < nodes.length; k++) {
+                var option = nodes[k];
+                var customOption = document.createElement('div');
+                customOption.className = 'custom-option';
+                customOption.setAttribute('role', 'option');
+                customOption.id = 'opt-' + (select.id || select.name || 'sel') + '-' + k;
+                customOption.setAttribute('aria-selected', k === select.selectedIndex ? 'true' : 'false');
+                customOption.textContent = option.text;
+                customOption.dataset.value = option.value;
+                customOption.dataset.index = k;
+                if (k === select.selectedIndex) {
+                    customOption.classList.add('selected');
+                }
+                optionsDiv.appendChild(customOption);
+                optionEls.push(customOption);
             }
+        }
+        renderOptions();
 
-            customOption.addEventListener('click', function (e) {
-                // Update original select
-                select.value = this.dataset.value;
+        // Active cursor: the option visually highlighted while the listbox is
+        // open (roving). The committed value is tracked separately so moving
+        // the cursor with arrows never commits — commit only on Enter/Space.
+        var activeIndex = select.selectedIndex;
 
-                // Update trigger text
-                trigger.querySelector('span').textContent = this.textContent;
-
-                // Handle visual selection state
-                optionsDiv.querySelectorAll('.custom-option').forEach(function (opt) {
-                    opt.classList.remove('selected');
-                });
-                this.classList.add('selected');
-
-                // Close dropdown
-                customSelect.classList.remove('open');
-
-                // Trigger change event on original select so app logic runs
-                var event = new Event('change');
-                select.dispatchEvent(event);
-
-                e.stopPropagation();
+        function setActiveOption(index) {
+            index = (index + optionEls.length) % optionEls.length;
+            activeIndex = index;
+            optionEls.forEach(function (el, i) {
+                el.classList.toggle('active', i === index);
             });
+            var active = optionEls[index];
+            if (active && active.scrollIntoView) {
+                active.scrollIntoView({ block: 'nearest' });
+            }
+        }
 
-            optionsDiv.appendChild(customOption);
-        });
+        // Persist the currently active option as the selected value.
+        function commitActive() {
+            var optEl = optionEls[activeIndex];
+            if (!optEl) return;
+            selectOption(activeIndex);
+            closeListbox();
+            var event = new Event('change');
+            select.dispatchEvent(event);
+            trigger.focus();
+        }
 
-        // Toggle Open/Close
-        trigger.addEventListener('click', function (e) {
+        // Reflect a committed choice in the trigger + select + selected states.
+        function selectOption(index) {
+            var optEl = optionEls[index];
+            if (!optEl) return;
+            select.value = optEl.dataset.value;
+            trigger.querySelector('span').textContent = optEl.textContent;
+            optionEls.forEach(function (el) {
+                el.classList.toggle('selected', el === optEl);
+                el.setAttribute('aria-selected', el === optEl ? 'true' : 'false');
+            });
+            activeIndex = index;
+        }
+
+        function openListbox() {
             // Close all other dropdowns
             document.querySelectorAll('.custom-select').forEach(function (el) {
                 if (el !== customSelect) el.classList.remove('open');
+                var trig = el.querySelector('.custom-select-trigger');
+                if (trig) trig.setAttribute('aria-expanded', 'false');
             });
-            customSelect.classList.toggle('open');
+            // Open on the current active option, not a reset to the selected one.
+            customSelect.classList.add('open');
+            toggleExpanded(true);
+            setActiveOption(activeIndex);
+        }
+
+        function toggleExpanded(open) {
+            trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+
+        function closeListbox() {
+            customSelect.classList.remove('open');
+            toggleExpanded(false);
+        }
+
+        // Mouse interaction
+        optionEls.forEach(function (customOption) {
+            customOption.addEventListener('mousedown', function (e) {
+                // Keep focus on the trigger so the listbox closes predictably.
+                e.preventDefault();
+            });
+            customOption.addEventListener('click', function (e) {
+                selectOption(parseInt(this.dataset.index));
+                commitActive();
+                e.stopPropagation();
+            });
+        });
+
+        trigger.addEventListener('click', function (e) {
+            if (customSelect.classList.contains('open')) {
+                closeListbox();
+            } else {
+                openListbox();
+            }
             e.stopPropagation();
+        });
+
+        // Keyboard interaction (ARIA combobox / listbox pattern)
+        trigger.addEventListener('keydown', function (e) {
+            var open = customSelect.classList.contains('open');
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (!open) openListbox();
+                else setActiveOption(activeIndex + 1);
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                e.preventDefault();
+                if (!open) openListbox();
+                else setActiveOption(activeIndex - 1);
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (!open) openListbox();
+                else commitActive();
+            } else if (e.key === 'Escape') {
+                if (open) {
+                    e.preventDefault();
+                    closeListbox();
+                    trigger.focus();
+                }
+            } else if (e.key === 'Home') {
+                e.preventDefault();
+                setActiveOption(0);
+            } else if (e.key === 'End') {
+                e.preventDefault();
+                setActiveOption(optionEls.length - 1);
+            }
         });
     });
 
@@ -332,6 +439,8 @@ function setupCustomDropdowns() {
         if (!e.target.closest('.custom-select-wrapper')) {
             document.querySelectorAll('.custom-select').forEach(function (el) {
                 el.classList.remove('open');
+                var trig = el.querySelector('.custom-select-trigger');
+                if (trig) trig.setAttribute('aria-expanded', 'false');
             });
         }
     });

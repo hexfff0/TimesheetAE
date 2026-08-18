@@ -344,8 +344,18 @@ function initUpdater() {
         });
         if (typeof fetch === 'function') {
             label.title = 'Check for updates';
+            // The version label is a clickable action, so give it button
+            // semantics for assistive tech and keyboard users.
+            label.setAttribute('role', 'button');
+            label.tabIndex = 0;
             label.addEventListener('click', function () {
                 checkForUpdates(true);
+            });
+            label.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    checkForUpdates(true);
+                }
             });
         } else {
             label.title = '';

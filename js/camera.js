@@ -57,8 +57,45 @@ function setupCameraHandlers() {
 
     // Close modal on X button click
     document.getElementById('cameraCompClose').addEventListener('click', function () {
-        document.getElementById('cameraCompModal').classList.remove('open');
+        closeCameraModal();
     });
+}
+
+function closeCameraModal() {
+    var modal = document.getElementById('cameraCompModal');
+    modal.classList.remove('open');
+    returnFocus(getLastFocused());
+}
+
+/**
+ * The last element focused before a modal opened, so focus can be restored on
+ * close. Shared by both modals (camera + preview).
+ */
+var _lastFocusedBeforeModal = null;
+
+function getLastFocused() {
+    return _lastFocusedBeforeModal;
+}
+
+function setLastFocused(el) {
+    _lastFocusedBeforeModal = el;
+}
+
+/**
+ * Move focus into a modal on open, remembering the trigger element so it can
+ * be restored on close. Prefers the primary choice over the close button.
+ */
+function moveFocusIn(modal) {
+    var opener = document.activeElement;
+    if (opener && opener !== document.body) setLastFocused(opener);
+    var first = modal.querySelector('.modal-option, button:not(.modal-close), input, select, a, [tabindex]');
+    if (first) first.focus();
+}
+
+function returnFocus(el) {
+    if (el && el.focus) {
+        try { el.focus(); } catch (e) {}
+    }
 }
 
 function importCameraFromXdts() {
@@ -130,4 +167,5 @@ function newCompFromSelection() {
     var h = parseInt(document.getElementById('camHeight').value) || 1080;
     var modal = document.getElementById('cameraCompModal');
     modal.classList.add('open');
+    moveFocusIn(modal);
 }

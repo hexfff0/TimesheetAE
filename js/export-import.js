@@ -32,7 +32,9 @@ function previewData() {
             importObj.fileName = fileName;
             previewImportData = importObj;
             buildPreviewTable(importObj);
-            document.getElementById('previewModal').classList.add('open');
+            var previewModal = document.getElementById('previewModal');
+            previewModal.classList.add('open');
+            moveFocusIn(previewModal);
             updateStatus('Preview loaded: ' + fileName);
 
         } catch (err) {

@@ -243,15 +243,74 @@ function handleKeyDown(e) {
 }
 
 // Preview modal close on X button
-document.getElementById('previewModalClose').addEventListener('click', function () {
-    document.getElementById('previewModal').classList.remove('open');
-    previewImportData = null;
+var previewModal = document.getElementById('previewModal');
+previewModal.addEventListener('click', function (e) {
+    if (e.target === this) {
+        closePreviewModal();
+    }
 });
 
-// Preview modal close on overlay click
-document.getElementById('previewModal').addEventListener('click', function (e) {
+document.getElementById('previewModalClose').addEventListener('click', function () {
+    closePreviewModal();
+});
+
+function closePreviewModal() {
+    document.getElementById('previewModal').classList.remove('open');
+    previewImportData = null;
+    returnFocus(getLastFocused());
+}
+
+// Remove All modal wiring: confirm, cancel, close button, overlay click.
+var removeAllModal = document.getElementById('removeAllModal');
+removeAllModal.addEventListener('click', function (e) {
     if (e.target === this) {
-        this.classList.remove('open');
-        previewImportData = null;
+        closeRemoveAllModal();
+        return;
+    }
+    var btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    if (btn.dataset.action === 'confirm') {
+        confirmRemoveAll();
+    } else {
+        closeRemoveAllModal();
+    }
+});
+document.getElementById('removeAllClose').addEventListener('click', function () {
+    closeRemoveAllModal();
+});
+
+// Escape closes any open modal and restores focus to the opener.
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+        var openModal = document.querySelector('.modal-overlay.open');
+        if (!openModal) return;
+        e.preventDefault();
+        if (openModal.id === 'previewModal') {
+            closePreviewModal();
+        } else if (openModal.id === 'cameraCompModal') {
+            closeCameraModal();
+        } else if (openModal.id === 'removeAllModal') {
+            closeRemoveAllModal();
+        }
+        return;
+    }
+
+    // Keep Tab focus inside an open modal (camera or preview) so keyboard
+    // users cannot tab out behind the overlay.
+    if (e.key !== 'Tab') return;
+    var modalEl = document.querySelector('.modal-overlay.open');
+    if (!modalEl) return;
+    var focusables = modalEl.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusables.length) return;
+    var first = focusables[0];
+    var last = focusables[focusables.length - 1];
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === modalEl)) {
+        e.preventDefault();
+        last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
     }
 });

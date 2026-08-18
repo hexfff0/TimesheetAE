@@ -6,7 +6,9 @@
     --bg-color: #1a1a1a;
     --panel-bg: #232323;
     --border-color: #383838;
-    --accent-color: #0c8ce9;
+    --accent-color: #0f9bf0;
+    /* Accent fill behind white text: dark enough for 4.5:1 contrast. */
+    --accent-strong: #0872b8;
     --text-primary: #e0e0e0;
     --text-secondary: #9e9e9e;
     --hover-bg: #2a2a2a;
@@ -33,7 +35,20 @@ body {
     height: 100vh;
     display: flex;
     flex-direction: column;
-    user-select: none;
+}
+
+/* Visible focus indicator for keyboard users (accent ring). Selected cells
+   use an inset box-shadow so this outline never collides with it. */
+:focus-visible {
+    outline: 2px solid var(--selected-border);
+    outline-offset: 1px;
+}
+
+/* Keyboard users can focus the Re-index checkbox even though its input is
+   visually replaced by the toggle label. */
+.toggle-wrapper input[type="checkbox"]:focus-visible+.toggle-label {
+    outline: 2px solid var(--selected-border);
+    outline-offset: 1px;
 }
 
 /* Controls Section */
@@ -45,6 +60,15 @@ body {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    /* Toolbar is interactive chrome; clicking controls must not select the
+       adjacent label text. Inputs below opt back into text selection. */
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#controls input {
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 .toolbar-section {
@@ -56,6 +80,8 @@ body {
     display: flex;
     gap: 8px;
     align-items: center;
+    flex-wrap: wrap;
+    /* let trailing controls wrap instead of clipping at narrow widths */
 }
 
 /* Buttons */
@@ -68,7 +94,7 @@ body {
     cursor: pointer;
     font-size: 11px;
     font-weight: 500;
-    transition: all 0.15s;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
     line-height: 1.4;
     white-space: nowrap;
 }
@@ -89,14 +115,20 @@ body {
 }
 
 .btn-primary {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
     color: #fff;
 }
 
 .btn-primary:hover {
-    background: #0a7ad0;
-    border-color: #0a7ad0;
+    background: #0a64a8;
+    border-color: #0a64a8;
+}
+
+.btn-primary:focus-visible {
+    outline: 2px solid var(--selected-border);
+    outline-offset: 2px;
+    outline-color: #fff;
 }
 
 .btn-ghost {
@@ -295,6 +327,21 @@ select {
     transform: translateY(0);
 }
 
+/* Trigger is now a <button> (was a <div>); keep its chrome identical. */
+button.custom-select-trigger {
+    display: flex;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.custom-option.active {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+    box-shadow: inset 0 0 0 1px var(--selected-border);
+}
+
 .custom-option {
     position: relative;
     display: block;
@@ -307,7 +354,7 @@ select {
 }
 
 .custom-option:hover {
-    background: var(--accent-color);
+    background: var(--accent-strong);
     color: #fff;
 }
 
@@ -353,8 +400,23 @@ select {
 }
 
 /* Toggle Styles */
+.toggle-wrapper {
+    position: relative;
+    /* containing block for the visually-hidden checkbox */
+}
+
+/* Visually-hidden, NOT display:none: the checkbox must stay keyboard-focusable
+   so the toggle can be reached without a mouse. */
 .toggle-wrapper input[type="checkbox"] {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 .toggle-wrapper .toggle-label {
@@ -377,7 +439,7 @@ select {
     border-color: #555;
 }
 
-.toggle-wrapper input[type="checkbox"]:checked + .toggle-label {
+.toggle-wrapper input[type="checkbox"]:checked+.toggle-label {
     border-color: var(--accent-color);
     color: var(--accent-color);
     background: rgba(12, 140, 233, 0.1);
@@ -389,6 +451,14 @@ select {
     overflow: auto;
     background: var(--row-bg);
     position: relative;
+    /* Drag-to-move/drag-extend on the grid make accidental text selection a
+       hazard; suppress it only here so labels and headers stay selectable. */
+    user-select: none;
+}
+
+#tableContainer input {
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 #timesheetTable {
@@ -529,7 +599,8 @@ tbody tr.second-border {
     position: fixed;
     left: 8px;
     right: 8px;
-    bottom: 26px; /* sits above the status bar */
+    bottom: 26px;
+    /* sits above the status bar */
     display: flex;
     align-items: center;
     gap: 8px;
@@ -542,13 +613,15 @@ tbody tr.second-border {
     z-index: 1000;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
+
 #updateBanner .update-banner-text {
     flex: 1 1 auto;
     white-space: normal;
     line-height: 1.35;
 }
+
 #updateBanner .update-banner-btn {
-    background: var(--accent-color);
+    background: var(--accent-strong);
     color: #fff;
     border: 0;
     border-radius: 4px;
@@ -558,13 +631,16 @@ tbody tr.second-border {
     cursor: pointer;
     flex-shrink: 0;
 }
+
 #updateBanner .update-banner-btn:hover {
     filter: brightness(1.1);
 }
+
 #updateBanner .update-banner-btn:disabled {
     opacity: 0.6;
     cursor: default;
 }
+
 #updateBanner .update-banner-close {
     background: transparent;
     border: 0;
@@ -575,6 +651,7 @@ tbody tr.second-border {
     flex-shrink: 0;
     padding: 2px 4px;
 }
+
 #updateBanner .update-banner-close:hover {
     color: var(--text-primary);
 }
@@ -616,8 +693,11 @@ tbody tr.second-border {
 .modal-overlay {
     display: none;
     position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.72);
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.72);
     z-index: 999;
     align-items: center;
     justify-content: center;
@@ -638,6 +718,7 @@ tbody tr.second-border {
 
 .modal-close {
     position: absolute;
+    z-index: 5;
     top: 8px;
     right: 8px;
     display: flex;
@@ -656,12 +737,12 @@ tbody tr.second-border {
 
 .modal-close:hover {
     color: var(--text-primary);
-    background: rgba(255,255,255,0.06);
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .modal-close:active {
     color: var(--text-primary);
-    background: rgba(255,255,255,0.1);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .modal-label {
@@ -669,7 +750,7 @@ tbody tr.second-border {
     font-weight: 500;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #888;
+    color: #b5b5b5;
     margin-bottom: 12px;
     text-align: center;
 }
@@ -697,7 +778,7 @@ tbody tr.second-border {
 
 .modal-option:hover {
     border-color: #555;
-    background: rgba(255,255,255,0.04);
+    background: rgba(255, 255, 255, 0.04);
 }
 
 .modal-option:active {
@@ -713,8 +794,22 @@ tbody tr.second-border {
 .modal-option-desc {
     font-size: 10.5px;
     line-height: 1.35;
-    color: #888;
+    color: #b5b5b5;
     text-align: center;
+}
+
+.removeall-danger {
+    border-color: #d0312d;
+    color: #ff6b66;
+}
+
+.removeall-danger .modal-option-label {
+    color: #ff6b66;
+}
+
+.removeall-danger:hover {
+    border-color: #ff6b66;
+    background: rgba(208, 49, 45, 0.12);
 }
 
 /* Preview Modal */
@@ -793,4 +888,18 @@ tbody tr.second-border {
     font-size: 11px;
     color: var(--text-secondary);
     text-align: center;
+}
+
+/* Respect users who prefer less motion: drop translate/opacity slides and
+   fast transitions, replace them with plain opacity crossfades. */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

@@ -137,19 +137,39 @@ function deleteKeyframe(layerIndex, layerName, frame) {
 }
 
 /**
- * Triggers the removal of all Time Remap keyframes using a professional Native Dialog.
+ * Open the in-panel Remove All confirmation modal (styled like the camera-link
+ * modal). Confirmation runs the actual reset; cancel/close does nothing.
  */
 function removeAllKeyframes() {
-    // Call the native dialog function in AE
-    evalHost('ConfirmDialog', [], function (result) {
-        if (result === "true") {
-            // Reset UI and local data on success
-            resetCurrentData();
-            rebuildTable();
+    var modal = document.getElementById('removeAllModal');
+    if (!modal) return;
+    modal.classList.add('open');
+    moveFocusIn(modal);
+}
+
+/**
+ * Perform the actual reset after the user confirms. Kept separate from the
+ * modal plumbing so keyboard/click confirmation share one code path. The host
+ * does the real removal (disables Time Remap on every selected layer); on
+ * success re-sync so the table reflects the cleared layers.
+ */
+function confirmRemoveAll() {
+    closeRemoveAllModal();
+    updateStatus('Removing Time Remap...');
+    evalHost('removeAllTimeRemap', [], function (result) {
+        if (result === 'true') {
             updateStatus('Time Remap reset successfully.');
+            syncLayers();
+        } else {
+            updateStatus(result && /^Error:/.test(result) ? result : 'Error: ' + result);
         }
-        // If "false" or "cancelled", do nothing (Status remains same or updated)
     });
+}
+
+function closeRemoveAllModal() {
+    var modal = document.getElementById('removeAllModal');
+    if (modal) modal.classList.remove('open');
+    returnFocus(getLastFocused());
 }
 
 // Move selected keyframes up or down by offset frames

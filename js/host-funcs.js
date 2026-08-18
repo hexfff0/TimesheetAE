@@ -526,6 +526,33 @@ function trimLayerDuration(layerIndex, layerName, endFrame, maxFrame, fps) {
 }
 
 /**
+ * Remove Time Remap from every selected layer (disables Time Remapping, which
+ * deletes its keyframes). No dialog — the panel shows its own confirmation.
+ * @return {string} "true" on success, "Error: ..." otherwise.
+ */
+function removeAllTimeRemap() {
+    var comp = activeComp();
+    if (!comp) return "Error: No active composition";
+
+    var selectedLayers = comp.selectedLayers;
+    if (selectedLayers.length === 0) return "Error: No layers selected";
+
+    app.beginUndoGroup("Remove All Time Remap");
+    try {
+        for (var i = 0; i < selectedLayers.length; i++) {
+            if (selectedLayers[i].canSetTimeRemapEnabled) {
+                selectedLayers[i].timeRemapEnabled = false;
+            }
+        }
+        app.endUndoGroup();
+        return "true";
+    } catch (e) {
+        app.endUndoGroup();
+        return e.toString();
+    }
+}
+
+/**
  * Displays ScriptUI dialog for confirmation.
  * @return {string} "true" if confirmed, "false" if cancelled.
  */
@@ -1070,4 +1097,4 @@ function cleanupStagedUpdate(installRoot) {
     }
 }`;
 
-// HOST_BUNDLE_SHA256=f2e79d4d3cdd92a5dc9e69c02c4abb3cb6b2a60d1e1e42012acd3e617610531d
+// HOST_BUNDLE_SHA256=fe55aed010b456d5f0c87a10ab9811ab5ebf320cf631bcab5bbe5dd32f02fcfc

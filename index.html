@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <meta charset="utf-8">
@@ -16,13 +16,13 @@
                     <div class="number-input-wrapper">
                         <input type="number" id="frameInterval" value="6" min="1" max="24">
                         <div class="spinner-arrows">
-                            <div class="spinner-up">
+                            <div class="spinner-up" aria-hidden="true">
                                 <svg width="8" height="5" viewBox="0 0 10 6" fill="none">
                                     <path d="M1 5L5 1L9 5" stroke="currentColor" stroke-width="1.5"
                                         stroke-linecap="round" stroke-linejoin="round" />
                                 </svg>
                             </div>
-                            <div class="spinner-down">
+                            <div class="spinner-down" aria-hidden="true">
                                 <svg width="8" height="5" viewBox="0 0 10 6" fill="none">
                                     <path d="M9 1L5 5L1 1" stroke="currentColor" stroke-width="1.5"
                                         stroke-linecap="round" stroke-linejoin="round" />
@@ -97,9 +97,9 @@
     </div>
 
     <div class="modal-overlay" id="cameraCompModal">
-        <div class="modal-box">
-            <button class="modal-close" id="cameraCompClose">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <div class="modal-box" role="dialog" aria-modal="true" aria-label="Camera Link">
+            <button class="modal-close" id="cameraCompClose" aria-label="Close">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                     <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
                 </svg>
             </button>
@@ -117,11 +117,33 @@
         </div>
     </div>
 
+    <!-- Remove All confirm modal -->
+    <div class="modal-overlay" id="removeAllModal">
+        <div class="modal-box" role="dialog" aria-modal="true" aria-label="Remove All">
+            <button class="modal-close" id="removeAllClose" aria-label="Close">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                    <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                </svg>
+            </button>
+            <div class="modal-label">Remove All</div>
+            <div class="modal-options">
+                <button class="modal-option" id="removeAllCancel" data-action="cancel">
+                    <span class="modal-option-label">Cancel</span>
+                    <span class="modal-option-desc">Keep keyframes</span>
+                </button>
+                <button class="modal-option removeall-danger" id="removeAllConfirm" data-action="confirm">
+                    <span class="modal-option-label">Remove All</span>
+                    <span class="modal-option-desc">Delete every keyframe</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Preview Modal -->
     <div class="modal-overlay" id="previewModal">
-        <div class="preview-modal-box">
-            <button class="modal-close" id="previewModalClose">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <div class="preview-modal-box" role="dialog" aria-modal="true" aria-label="Preview">
+            <button class="modal-close" id="previewModalClose" aria-label="Close">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                     <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
                 </svg>
             </button>
@@ -139,7 +161,7 @@
     </div>
 
     <div id="status">
-        <span id="statusText">Ready</span>
+        <span id="statusText" role="status" aria-live="polite">Ready</span>
         <span id="versionLabel" class="version-label"></span>
     </div>
 
