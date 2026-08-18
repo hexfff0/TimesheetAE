@@ -29,7 +29,7 @@ var UPDATE_FILE_BASE = 'https://raw.githubusercontent.com/' + UPDATE_REPO_OWNER 
 // The version this build was shipped as (matches CSXS/manifest.xml). Update
 // this on every release; it is the fallback when the install has no
 // version.json yet (e.g. a pre-updater install).
-var UPDATE_CURRENT_VERSION = '3.4.0';
+var UPDATE_CURRENT_VERSION = '3.5.0';
 
 var UPDATE_STATE = {
     available: null    // parsed remote version.json when newer
